@@ -1,17 +1,16 @@
 'use client'
 
-import axios from 'axios'
 import { FC, useRef, useState } from 'react'
-import { toast } from 'react-hot-toast'
 import TextareaAutosize from 'react-textarea-autosize'
 import Button from './ui/Button'
+import axios from 'axios'
+import { toast } from 'react-hot-toast'
 
 interface ChatInputProps {
-  chatPartner: User
   chatId: string
 }
 
-const ChatInput: FC<ChatInputProps> = ({ chatPartner, chatId }) => {
+const ChatInput: FC<ChatInputProps> = ({ chatId }) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [input, setInput] = useState<string>('')
@@ -24,7 +23,7 @@ const ChatInput: FC<ChatInputProps> = ({ chatPartner, chatId }) => {
       await axios.post('/api/message/send', { text: input, chatId })
       setInput('')
       textareaRef.current?.focus()
-    } catch {
+    } catch (error) {
       toast.error('Something went wrong. Please try again later.')
     } finally {
       setIsLoading(false)
@@ -45,7 +44,7 @@ const ChatInput: FC<ChatInputProps> = ({ chatPartner, chatId }) => {
           rows={1}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={`Message ${chatPartner.name}`}
+          placeholder={`Type a message`}
           className='block w-full resize-none border-0 bg-transparent text-gray-900 placeholder:text-gray-400 focus:ring-0 sm:py-1.5 sm:text-sm sm:leading-6'
         />
 
@@ -59,7 +58,7 @@ const ChatInput: FC<ChatInputProps> = ({ chatPartner, chatId }) => {
         </div>
 
         <div className='absolute right-0 bottom-0 flex justify-between py-2 pl-3 pr-2'>
-          <div className='flex-shrin-0'>
+          <div className='flex-shink-0'>
             <Button isLoading={isLoading} onClick={sendMessage} type='submit'>
               Post
             </Button>

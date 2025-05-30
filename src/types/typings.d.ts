@@ -6,3 +6,16 @@ interface SidebarOption {
   href: string
   Icon: Icon
 }
+
+interface GroupChat {
+  id: string
+  name: string
+  creatorId: string
+  members: string[]
+  createdAt: number
+}
+
+interface UserRanking {
+  userId: string
+  position: number
+}

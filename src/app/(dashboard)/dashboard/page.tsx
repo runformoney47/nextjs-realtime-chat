@@ -23,7 +23,19 @@ const page = async ({}) => {
         -1
       )) as string[]
 
-      const lastMessage = JSON.parse(lastMessageRaw) as Message
+      let lastMessage: Message | undefined = undefined
+      
+      if (lastMessageRaw) {
+        lastMessage = JSON.parse(lastMessageRaw) as Message
+      } else {
+        lastMessage = {
+          id: 'placeholder',
+          senderId: friend.id,
+          receiverId: session.user.id,
+          text: 'No messages yet',
+          timestamp: Date.now(),
+        }
+      }
 
       return {
         ...friend,
@@ -68,11 +80,11 @@ const page = async ({}) => {
                 <h4 className='text-lg font-semibold'>{friend.name}</h4>
                 <p className='mt-1 max-w-md'>
                   <span className='text-zinc-400'>
-                    {friend.lastMessage.senderId === session.user.id
+                    {friend.lastMessage && friend.lastMessage.senderId === session.user.id
                       ? 'You: '
                       : ''}
                   </span>
-                  {friend.lastMessage.text}
+                  {friend.lastMessage ? friend.lastMessage.text : 'No messages yet'}
                 </p>
               </div>
             </Link>

@@ -23,3 +23,16 @@ interface FriendRequest {
   senderId: string
   receiverId: string
 }
+
+interface GroupChat {
+  id: string
+  name: string
+  creatorId: string
+  members: string[] // array of user IDs
+  createdAt: number
+  lastMessage?: Message
+}
+
+interface GroupChatMessage extends Message {
+  chatId: string
+}

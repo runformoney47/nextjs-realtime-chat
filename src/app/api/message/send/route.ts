@@ -14,58 +14,114 @@ export async function POST(req: Request) {
 
     if (!session) return new Response('Unauthorized', { status: 401 })
 
-    const [userId1, userId2] = chatId.split('--')
+    const isGroupChat = chatId.startsWith('group_')
 
-    if (session.user.id !== userId1 && session.user.id !== userId2) {
-      return new Response('Unauthorized', { status: 401 })
+    if (isGroupChat) {
+      // Verify user is member of group chat
+      const chatData = await fetchRedis('get', `chat:${chatId}`)
+      if (!chatData) return new Response('Chat not found', { status: 404 })
+      
+      const groupChat = JSON.parse(chatData) as GroupChat
+      if (!groupChat.members.includes(session.user.id)) {
+        return new Response('Unauthorized', { status: 401 })
+      }
+
+      const timestamp = Date.now()
+      const messageData: Message = {
+        id: nanoid(),
+        senderId: session.user.id,
+        text,
+        timestamp,
+      }
+
+      const message = messageValidator.parse(messageData)
+      const channelName = toPusherKey(`chat:${chatId}`)
+
+      console.log(`Triggering Pusher event 'incoming-message' on channel ${channelName}`)
+      
+      // Notify all group members
+      await pusherServer.trigger(
+        channelName,
+        'incoming-message',
+        message
+      ).catch(error => {
+        console.error('Pusher trigger error:', error)
+        throw new Error('Failed to send message via Pusher')
+      })
+
+      console.log('Message sent successfully via Pusher')
+
+      // Store the message
+      await db.zadd(`chat:${chatId}:messages`, {
+        score: timestamp,
+        member: JSON.stringify(message),
+      })
+
+      return new Response('OK')
+    } else {
+      // One-to-one chat logic
+      const [userId1, userId2] = chatId.split('--')
+
+      if (session.user.id !== userId1 && session.user.id !== userId2) {
+        return new Response('Unauthorized', { status: 401 })
+      }
+
+      const friendId = session.user.id === userId1 ? userId2 : userId1
+
+      const friendList = (await fetchRedis(
+        'smembers',
+        `user:${session.user.id}:friends`
+      )) as string[]
+      const isFriend = friendList.includes(friendId)
+
+      if (!isFriend) {
+        return new Response('Unauthorized', { status: 401 })
+      }
+
+      const rawSender = (await fetchRedis(
+        'get',
+        `user:${session.user.id}`
+      )) as string
+      const sender = JSON.parse(rawSender) as User
+
+      const timestamp = Date.now()
+
+      const messageData: Message = {
+        id: nanoid(),
+        senderId: session.user.id,
+        text,
+        timestamp,
+      }
+
+      const message = messageValidator.parse(messageData)
+
+      // Notify all connected chat room clients
+      await pusherServer.trigger(
+        toPusherKey(`chat:${chatId}`),
+        'incoming-message',
+        message
+      )
+
+      await pusherServer.trigger(
+        toPusherKey(`user:${friendId}:chats`),
+        'new_message',
+        {
+          ...message,
+          senderImg: sender.image,
+          senderName: sender.name
+        }
+      )
+
+      // Store the message
+      await db.zadd(`chat:${chatId}:messages`, {
+        score: timestamp,
+        member: JSON.stringify(message),
+      })
+
+      return new Response('OK')
     }
-
-    const friendId = session.user.id === userId1 ? userId2 : userId1
-
-    const friendList = (await fetchRedis(
-      'smembers',
-      `user:${session.user.id}:friends`
-    )) as string[]
-    const isFriend = friendList.includes(friendId)
-
-    if (!isFriend) {
-      return new Response('Unauthorized', { status: 401 })
-    }
-
-    const rawSender = (await fetchRedis(
-      'get',
-      `user:${session.user.id}`
-    )) as string
-    const sender = JSON.parse(rawSender) as User
-
-    const timestamp = Date.now()
-
-    const messageData: Message = {
-      id: nanoid(),
-      senderId: session.user.id,
-      text,
-      timestamp,
-    }
-
-    const message = messageValidator.parse(messageData)
-
-    // notify all connected chat room clients
-    await pusherServer.trigger(toPusherKey(`chat:${chatId}`), 'incoming-message', message)
-
-    await pusherServer.trigger(toPusherKey(`user:${friendId}:chats`), 'new_message', {
-      ...message,
-      senderImg: sender.image,
-      senderName: sender.name
-    })
-
-    // all valid, send the message
-    await db.zadd(`chat:${chatId}:messages`, {
-      score: timestamp,
-      member: JSON.stringify(message),
-    })
-
-    return new Response('OK')
   } catch (error) {
+    console.error('Message send error:', error)
     if (error instanceof Error) {
       return new Response(error.message, { status: 500 })
     }

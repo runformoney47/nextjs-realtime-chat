@@ -1,13 +1,12 @@
-import ChatInput from '@/components/ChatInput'
-import Messages from '@/components/Messages'
+import ChatWrapper from '@/components/ChatWrapper'
 import { fetchRedis } from '@/helpers/redis'
 import { authOptions } from '@/lib/auth'
 import { messageArrayValidator } from '@/lib/validations/message'
 import { getServerSession } from 'next-auth'
-import Image from 'next/image'
 import { notFound } from 'next/navigation'
+import { db } from '@/lib/db'
 
-// The following generateMetadata functiion was written after the video and is purely optional
+// The following generateMetadata function was written after the video and is purely optional
 export async function generateMetadata({
   params,
 }: {
@@ -15,7 +14,20 @@ export async function generateMetadata({
 }) {
   const session = await getServerSession(authOptions)
   if (!session) notFound()
-  const [userId1, userId2] = params.chatId.split('--')
+
+  const chatId = params.chatId
+
+  // Check if it's a group chat
+  if (chatId.startsWith('group_')) {
+    const chatData = await fetchRedis('get', `chat:${chatId}`)
+    if (!chatData) notFound()
+    
+    const groupChat = JSON.parse(chatData) as GroupChat
+    return { title: `FriendZone | ${groupChat.name}` }
+  }
+
+  // It's a one-to-one chat
+  const [userId1, userId2] = chatId.split('--')
   const { user } = session
 
   const chatPartnerId = user.id === userId1 ? userId2 : userId1
@@ -34,88 +46,123 @@ interface PageProps {
   }
 }
 
-async function getChatMessages(chatId: string) {
-  try {
-    const results: string[] = await fetchRedis(
-      'zrange',
-      `chat:${chatId}:messages`,
-      0,
-      -1
-    )
+async function getChatData(chatId: string) {
+  // Check if it's a group chat
+  if (chatId.startsWith('group_')) {
+    const chatData = await fetchRedis('get', `chat:${chatId}`)
+    if (!chatData) return null
+    return JSON.parse(chatData) as GroupChat
+  }
 
-    const dbMessages = results.map((message) => JSON.parse(message) as Message)
+  // It's a one-to-one chat
+  const [userId1, userId2] = chatId.split('--')
+  if (!userId1 || !userId2) return null
 
-    const reversedDbMessages = dbMessages.reverse()
-
-    const messages = messageArrayValidator.parse(reversedDbMessages)
-
-    return messages
-  } catch (error) {
-    notFound()
+  const user2 = await fetchRedis('get', `user:${userId2}`)
+  if (!user2) return null
+  
+  return {
+    id: chatId,
+    isGroup: false,
+    user: JSON.parse(user2) as User
   }
 }
 
-const page = async ({ params }: PageProps) => {
+async function getUserColors(chatId: string, members: string[]) {
+  // Fetch all user colors for this chat
+  const userColors: Record<string, string> = {}
+  
+  console.log(`Fetching colors for chat ${chatId} with ${members.length} members`)
+  
+  for (const userId of members) {
+    try {
+      // Try using db.get directly instead of fetchRedis
+      const colorKey = `chat:${chatId}:user:${userId}:color`
+      const color = await db.get(colorKey) as string | null
+      
+      console.log(`User ${userId} color from db.get: ${color}`)
+      
+      if (color) {
+        userColors[userId] = color
+      } else {
+        console.log(`No color found for user ${userId} in chat ${chatId}`)
+      }
+    } catch (error) {
+      console.error(`Error fetching color for user ${userId}:`, error)
+    }
+  }
+
+  console.log('Final user colors object:', userColors)
+  return userColors
+}
+
+async function Page({ params }: PageProps) {
   const { chatId } = params
   const session = await getServerSession(authOptions)
   if (!session) notFound()
 
-  const { user } = session
+  const chatData = await getChatData(chatId)
+  if (!chatData) notFound()
 
-  const [userId1, userId2] = chatId.split('--')
+  const isGroupChat = 'members' in chatData
 
-  if (user.id !== userId1 && user.id !== userId2) {
-    notFound()
+  // Verify user has access to chat
+  if (isGroupChat) {
+    const groupChat = chatData as GroupChat
+    if (!groupChat.members.includes(session.user.id)) notFound()
+    
+    // Set this as the user's current chat if it's a group chat
+    await db.set(`user:${session.user.id}:current_group_chat`, chatId)
+  } else {
+    const [userId1, userId2] = chatId.split('--')
+    if (session.user.id !== userId1 && session.user.id !== userId2) {
+      notFound()
+    }
   }
 
-  const chatPartnerId = user.id === userId1 ? userId2 : userId1
-  // new
+  const initialMessages = await fetchRedis(
+    'zrange',
+    `chat:${chatId}:messages`,
+    0,
+    -1
+  ) as string[]
 
-  const chatPartnerRaw = (await fetchRedis(
-    'get',
-    `user:${chatPartnerId}`
-  )) as string
-  const chatPartner = JSON.parse(chatPartnerRaw) as User
-  const initialMessages = await getChatMessages(chatId)
+  const messages = messageArrayValidator.parse(
+    initialMessages.map((message) => JSON.parse(message))
+  )
+
+  // Get user colors for group chat
+  let userColors = {}
+  let members: string[] = []
+  if (isGroupChat) {
+    const groupChat = chatData as GroupChat
+    members = groupChat.members
+    userColors = await getUserColors(chatId, members)
+  }
+
+  // Set a custom title for group chats
+  const title = isGroupChat 
+    ? '' // Empty title for group chats
+    : (chatData as any).user.name
+
+  const chatPartnerImage = isGroupChat
+    ? null // No image for group chats
+    : (chatData as any).user.image
 
   return (
-    <div className='flex-1 justify-between flex flex-col h-full max-h-[calc(100vh-6rem)]'>
-      <div className='flex sm:items-center justify-between py-3 border-b-2 border-gray-200'>
-        <div className='relative flex items-center space-x-4'>
-          <div className='relative'>
-            <div className='relative w-8 sm:w-12 h-8 sm:h-12'>
-              <Image
-                fill
-                referrerPolicy='no-referrer'
-                src={chatPartner.image}
-                alt={`${chatPartner.name} profile picture`}
-                className='rounded-full'
-              />
-            </div>
-          </div>
-
-          <div className='flex flex-col leading-tight'>
-            <div className='text-xl flex items-center'>
-              <span className='text-gray-700 mr-3 font-semibold'>
-                {chatPartner.name}
-              </span>
-            </div>
-
-            <span className='text-sm text-gray-600'>{chatPartner.email}</span>
-          </div>
-        </div>
-      </div>
-
-      <Messages
-        chatId={chatId}
-        chatPartner={chatPartner}
-        sessionImg={session.user.image}
-        sessionId={session.user.id}
-        initialMessages={initialMessages}
-      />
-      <ChatInput chatId={chatId} chatPartner={chatPartner} />
-    </div>
+    <ChatWrapper
+      chatId={chatId}
+      initialMessages={messages}
+      sessionId={session.user.id}
+      sessionImg={session.user.image}
+      chatPartner={isGroupChat ? null : (chatData as any).user}
+      title={title}
+      chatPartnerImage={chatPartnerImage}
+      isGroupChat={isGroupChat}
+      userColors={userColors}
+      members={members}
+    />
   )
 }
 
-export default page
+export default Page
