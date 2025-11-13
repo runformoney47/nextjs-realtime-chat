@@ -1,0 +1,41 @@
+config:
+  target: 'http://localhost:3000'
+  phases:
+    - duration: 60
+      arrivalRate: 5
+      name: "Warm up"
+    - duration: 120
+      arrivalRate: 20
+      name: "Ramp up load"
+    - duration: 300
+      arrivalRate: 50
+      name: "Sustained load"
+  plugins:
+    websocket: {}
+
+scenarios:
+  - name: "Chat simulation"
+    weight: 100
+    engine: ws
+    beforeRequest: "setUser"
+    flow:
+      - connect:
+          url: "ws://localhost:3000"
+      - send:
+          payload: '{"type":"join","room":"general"}'
+      - think: 2
+      - send:
+          payload: '{"type":"message","text":"Hello from {{ $randomString() }}"}'
+      - think: 5
+      - send:
+          payload: '{"type":"message","text":"Another message from {{ $randomString() }}"}'
+      - think: 10
+      - disconnect:
+
+functions:
+  setUser: |
+    function(requestParams, context, ee, next) {
+      context.vars.userId = 'user-' + Math.random().toString(36).substr(2, 9);
+      return next();
+    }
+

@@ -46,7 +46,17 @@ const page = async ({}) => {
 
   return (
     <div className='container py-12'>
-      <h1 className='font-bold text-5xl mb-8'>Recent chats</h1>
+      <div className='flex justify-between items-center mb-8'>
+        <h1 className='font-bold text-5xl'>Recent chats</h1>
+        {session.user.isAdmin && (
+          <Link
+            href='/admin'
+            className='bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors'
+          >
+            Admin Panel
+          </Link>
+        )}
+      </div>
       {friendsWithLastMessage.length === 0 ? (
         <p className='text-sm text-zinc-500'>Nothing to show here...</p>
       ) : (

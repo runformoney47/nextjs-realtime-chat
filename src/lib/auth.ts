@@ -24,7 +24,7 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: 'jwt',
   },
-
+  secret: process.env.NEXTAUTH_SECRET,
   pages: {
     signIn: '/login',
   },
@@ -63,6 +63,10 @@ export const authOptions: NextAuthOptions = {
         session.user.name = token.name
         session.user.email = token.email
         session.user.image = token.picture
+        
+        // Check if user is admin
+        const { isAdminClient } = await import('./admin')
+        session.user.isAdmin = isAdminClient(token.id)
       }
 
       return session
