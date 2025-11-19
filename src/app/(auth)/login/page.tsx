@@ -1,12 +1,25 @@
 'use client'
 
 import Button from '@/components/ui/Button'
-import { FC, useState } from 'react'
+import { FC, useMemo, useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { toast } from 'react-hot-toast'
+import { useRouter } from 'next/navigation'
+import clsx from 'clsx'
 
 const Page: FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [isSimLoading, setIsSimLoading] = useState<boolean>(false)
+  const [selectedMode, setSelectedMode] = useState<'new' | 'existing' | null>(
+    null
+  )
+  const [username, setUsername] = useState<string>('')
+  const router = useRouter()
+
+  const loginDisabled = useMemo(
+    () => isLoading || isSimLoading,
+    [isLoading, isSimLoading]
+  )
 
   async function loginWithGoogle() {
     setIsLoading(true)
@@ -17,6 +30,58 @@ const Page: FC = () => {
       toast.error('Something went wrong with your login.')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  async function loginWithSimulationUser() {
+    setIsSimLoading(true)
+    try {
+      if (!selectedMode) {
+        toast.error('Please choose to create or sign in to a temp account.')
+        return
+      }
+
+      if (!username.trim()) {
+        toast.error('Please enter a username to continue.')
+        return
+      }
+
+      const baseUrl =
+        typeof window !== 'undefined'
+          ? window.location.origin
+          : process.env.NEXTAUTH_URL || 'http://localhost:3000'
+
+      const randomSeed =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : Math.random().toString(36).slice(2)
+
+      const email = `sim-${randomSeed}@example.com`
+      const normalizedUsername = username.trim()
+
+      const result = await signIn('sim-user', {
+        name: normalizedUsername,
+        mode: selectedMode,
+        redirect: false,
+        callbackUrl: `${baseUrl}/dashboard`,
+      })
+
+      console.log('[SimUser][signIn][result]', result)
+
+      if (result?.error) {
+        toast.error(
+          `Failed to sign in as a simulation user: ${result.error}`
+        )
+        return
+      }
+
+      const url = result?.url ?? '/dashboard'
+      router.push(url)
+    } catch (error) {
+      console.error('[SimUser][loginWithSimulationUser] Failed to sign in', error)
+      toast.error('Something went wrong while creating a simulation user.')
+    } finally {
+      setIsSimLoading(false)
     }
   }
 
@@ -35,7 +100,8 @@ const Page: FC = () => {
             isLoading={isLoading}
             type='button'
             className='max-w-sm mx-auto w-full'
-            onClick={loginWithGoogle}>
+            onClick={loginWithGoogle}
+            disabled={loginDisabled}>
             {isLoading ? null : (
               <svg
                 className='mr-2 h-4 w-4'
@@ -67,6 +133,73 @@ const Page: FC = () => {
             )}
             Google
           </Button>
+
+          <div className='w-full border-t border-gray-200 pt-6'>
+            <h3 className='text-sm font-semibold text-gray-700 text-center mb-4'>
+              Temporary Account Simulator
+            </h3>
+
+            <div className='flex flex-col gap-3'>
+              <div className='flex gap-2'>
+                <button
+                  type='button'
+                  className={clsx(
+                    'flex-1 rounded-md border px-4 py-2 text-sm font-medium transition-colors',
+                    selectedMode === 'new'
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                      : 'border-gray-200 text-gray-600 hover:border-indigo-300'
+                  )}
+                  onClick={() => setSelectedMode('new')}
+                  disabled={loginDisabled}>
+                  Create temp account
+                </button>
+                <button
+                  type='button'
+                  className={clsx(
+                    'flex-1 rounded-md border px-4 py-2 text-sm font-medium transition-colors',
+                    selectedMode === 'existing'
+                      ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                      : 'border-gray-200 text-gray-600 hover:border-indigo-300'
+                  )}
+                  onClick={() => setSelectedMode('existing')}
+                  disabled={loginDisabled}>
+                  Sign into temp account
+                </button>
+              </div>
+
+              <div className='flex flex-col gap-2'>
+                <label
+                  htmlFor='sim-username'
+                  className='text-xs font-medium text-gray-500'>
+                  Username
+                </label>
+                <input
+                  id='sim-username'
+                  type='text'
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  className='w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400'
+                  placeholder='e.g. user123'
+                  autoComplete='off'
+                  disabled={loginDisabled}
+                />
+              </div>
+
+              <Button
+                isLoading={isSimLoading}
+                type='button'
+                className='w-full'
+                onClick={loginWithSimulationUser}
+                disabled={loginDisabled}>
+                {isSimLoading ? null : 'Continue'}
+              </Button>
+
+              <p className='text-xs text-gray-500 text-center'>
+                Choose a username to create a new temp account or sign in to an existing
+                one. Use simple names to make load-testing scripts easier.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </>

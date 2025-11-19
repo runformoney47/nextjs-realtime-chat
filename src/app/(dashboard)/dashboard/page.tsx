@@ -12,6 +12,11 @@ const page = async ({}) => {
   const session = await getServerSession(authOptions)
   if (!session) notFound()
 
+  console.log('[AdminCheck][DashboardPage]', {
+    sessionUserId: session.user.id,
+    isAdmin: session.user.isAdmin,
+  })
+
   const friends = await getFriendsByUserId(session.user.id)
 
   const friendsWithLastMessage = await Promise.all(
