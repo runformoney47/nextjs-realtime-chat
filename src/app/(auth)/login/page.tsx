@@ -120,6 +120,33 @@ const Page: FC = () => {
       } else {
         console[method](`[SimUser] ${message}`)
       }
+
+      // Also mirror logs to the server terminal via a debug API in development.
+      if (process.env.NODE_ENV === 'development') {
+        try {
+          void fetch('/api/debug/client-log', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              level:
+                level === 'debug'
+                  ? 'debug'
+                  : level === 'error'
+                  ? 'error'
+                  : level === 'warn'
+                  ? 'warn'
+                  : 'info',
+              message,
+              payload,
+            }),
+          })
+        } catch (error) {
+          // Swallow network errors – logging should never break the UI.
+          console.warn('[SimUser] Failed to POST log to /api/debug/client-log', error)
+        }
+      }
     },
     []
   )
@@ -186,80 +213,55 @@ const Page: FC = () => {
         return
       }
 
-      const baseUrl =
-        typeof window !== 'undefined'
-          ? window.location.origin
-          : process.env.NEXTAUTH_URL || 'http://localhost:3000'
-
-      const randomSeed =
-        typeof crypto !== 'undefined' && crypto.randomUUID
-          ? crypto.randomUUID()
-          : Math.random().toString(36).slice(2)
-
-      const email = `sim-${randomSeed}@example.com`
       const normalizedUsername = username.trim()
-      const flowKind = selectedMode === 'new' ? 'create' : 'login'
-      const signInPayload = {
-        provider: 'sim-user',
-        flowKind,
-        redirect: false,
-        callbackUrl: `${baseUrl}/dashboard`,
-        name: normalizedUsername,
-        mode: selectedMode,
-      }
       const context = {
         interactionId,
-        baseUrl,
-        randomSeed,
         normalizedUsername,
-        email,
         selectedMode,
-        flowKind,
         envNextAuthUrl: process.env.NEXTAUTH_URL,
       }
 
       logSimEvent(
         'info',
-        'Validation complete. Proceeding to call NextAuth signIn.',
+        'Validation complete. Calling NextAuth sim-user provider.',
         context
       )
-      logSimEvent('debug', 'Prepared signIn payload (email truncated).', {
-        ...signInPayload,
-        emailPreview: email.slice(0, 12),
-      })
 
       const result = await signIn('sim-user', {
-        name: normalizedUsername,
+        username: normalizedUsername,
         mode: selectedMode,
         redirect: false,
-        callbackUrl: `${baseUrl}/dashboard`,
       })
 
-      logSimEvent('info', 'NextAuth signIn responded.', {
+      logSimEvent('info', 'NextAuth signIn responded for sim-user.', {
         interactionId,
         result,
       })
 
-      if (result?.error) {
-        logSimEvent('error', 'signIn reported an error.', {
+      if (result?.error || result?.ok === false) {
+        const error = result?.error ?? 'Unknown'
+
+        logSimEvent('error', 'sim-user signIn reported an error.', {
           interactionId,
-          error: result.error,
-          url: result.url,
+          error,
+          url: result?.url,
         })
-        if (result.error === 'Configuration') {
-          logSimEvent(
-            'error',
-            'Hint: NextAuth is missing a `sim-user` provider. Update auth configuration to enable simulation accounts.'
+
+        if (error === 'CredentialsSignin' && selectedMode === 'existing') {
+          toast.error(
+            `No temp account with username "${normalizedUsername}" exists yet. Try "Create temp account" first.`
+          )
+        } else {
+          toast.error(
+            `Failed to sign in as a temp user: ${error}`
           )
         }
-        toast.error(
-          `Failed to sign in as a simulation user: ${result.error}`
-        )
+
         return
       }
 
-      const url = result?.url ?? '/dashboard'
-      logSimEvent('info', 'Redirecting user after successful login.', {
+      const url = '/dashboard'
+      logSimEvent('info', 'Redirecting user after successful temp login.', {
         interactionId,
         url,
       })
