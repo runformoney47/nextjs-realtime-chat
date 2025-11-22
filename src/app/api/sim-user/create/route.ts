@@ -57,7 +57,8 @@ export async function POST(req: Request) {
       id,
       name: trimmed,
       email,
-      image: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
+      // Use PNG avatars instead of SVG to avoid Next.js dangerouslyAllowSVG warnings.
+      image: `https://api.dicebear.com/7.x/avataaars/png?seed=${encodeURIComponent(
         trimmed
       )}`,
       createdAt: new Date().toISOString(),

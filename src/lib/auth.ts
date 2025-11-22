@@ -20,6 +20,32 @@ function getGoogleCredentials() {
   return { clientId, clientSecret }
 }
 
+// Ensure NEXTAUTH_URL is set to a valid value
+// NextAuth requires this to construct URLs internally
+if (!process.env.NEXTAUTH_URL) {
+  if (process.env.NODE_ENV === 'development') {
+    // Default to localhost in development
+    process.env.NEXTAUTH_URL = 'http://localhost:3000'
+    console.log('[NextAuth] NEXTAUTH_URL not set, using default: http://localhost:3000')
+  } else {
+    console.warn('[NextAuth] NEXTAUTH_URL is not set. This may cause issues in production.')
+  }
+} else {
+  // Validate that NEXTAUTH_URL is a valid URL
+  try {
+    new URL(process.env.NEXTAUTH_URL)
+  } catch (error) {
+    console.error('[NextAuth] NEXTAUTH_URL is set but invalid:', process.env.NEXTAUTH_URL)
+    if (process.env.NODE_ENV === 'development') {
+      // Fallback to localhost in development if invalid
+      process.env.NEXTAUTH_URL = 'http://localhost:3000'
+      console.log('[NextAuth] Using fallback URL: http://localhost:3000')
+    } else {
+      throw new Error('NEXTAUTH_URL must be a valid URL')
+    }
+  }
+}
+
 export const authOptions: NextAuthOptions = {
   adapter: UpstashRedisAdapter(db),
   session: {
@@ -105,7 +131,8 @@ export const authOptions: NextAuthOptions = {
           }
 
           const now = new Date().toISOString()
-          const image = `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(
+          // Use PNG avatars instead of SVG to avoid Next.js dangerouslyAllowSVG warnings.
+          const image = `https://api.dicebear.com/7.x/avataaars/png?seed=${encodeURIComponent(
             username,
           )}`
 
@@ -178,8 +205,23 @@ export const authOptions: NextAuthOptions = {
 
       return session
     },
-    redirect() {
-      return '/dashboard'
+    // Ensure we always return an absolute URL so any internal `new URL()`
+    // calls in NextAuth/Next.js do not receive a relative path like
+    // "/dashboard", which would throw "Invalid URL" in the browser.
+    redirect({ url, baseUrl }) {
+      try {
+        // If the URL is already absolute, just return it.
+        const parsed = new URL(url)
+        return parsed.toString()
+      } catch {
+        // If it's relative (e.g. "/dashboard"), join it to baseUrl.
+        if (url.startsWith('/')) {
+          return `${baseUrl}${url}`
+        }
+
+        // Fallback: ignore unexpected values and just go to baseUrl.
+        return baseUrl
+      }
     },
   },
 }

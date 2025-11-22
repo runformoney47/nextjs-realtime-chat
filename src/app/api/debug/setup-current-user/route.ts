@@ -22,7 +22,8 @@ export async function POST() {
       id: session.user.id,
       name: session.user.name || 'Admin User',
       email: session.user.email || 'admin@example.com',
-      image: session.user.image || 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin',
+      // Prefer PNG avatar to avoid Next.js SVG image warnings.
+      image: session.user.image || 'https://api.dicebear.com/7.x/avataaars/png?seed=admin',
       createdAt: new Date().toISOString(),
       lastActive: new Date().toISOString(),
       isOnline: true,
@@ -38,7 +39,7 @@ export async function POST() {
         id: 'test-user-1',
         name: 'Test User 1',
         email: 'test1@example.com',
-        image: 'https://api.dicebear.com/7.x/avataaars/svg?seed=1',
+        image: 'https://api.dicebear.com/7.x/avataaars/png?seed=1',
         createdAt: new Date().toISOString(),
         lastActive: new Date().toISOString(),
         isOnline: true
@@ -47,7 +48,7 @@ export async function POST() {
         id: 'test-user-2',
         name: 'Test User 2',
         email: 'test2@example.com',
-        image: 'https://api.dicebear.com/7.x/avataaars/svg?seed=2',
+        image: 'https://api.dicebear.com/7.x/avataaars/png?seed=2',
         createdAt: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
         lastActive: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
         isOnline: false
@@ -56,7 +57,7 @@ export async function POST() {
         id: 'test-user-3',
         name: 'Test User 3',
         email: 'test3@example.com',
-        image: 'https://api.dicebear.com/7.x/avataaars/svg?seed=3',
+        image: 'https://api.dicebear.com/7.x/avataaars/png?seed=3',
         createdAt: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
         lastActive: new Date().toISOString(),
         isOnline: true
