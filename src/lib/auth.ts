@@ -4,6 +4,12 @@ import GoogleProvider from 'next-auth/providers/google'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { fetchRedis } from '@/helpers/redis'
 import { db } from './db'
+import {
+  AppUser,
+  getAppUserByEmail,
+  getAppUserById,
+  saveAppUser,
+} from './user-store'
 
 function getGoogleCredentials() {
   const clientId = process.env.GOOGLE_CLIENT_ID
@@ -84,33 +90,16 @@ export const authOptions: NextAuthOptions = {
 
           const email = `sim-${encodeURIComponent(username)}@example.com`
           const emailKey = `user:email:${email}`
-          const existingUserId = (await fetchRedis('get', emailKey)) as
-            | string
-            | null
+          const existingUser = await getAppUserByEmail(email)
 
           if (mode === 'existing') {
-            if (!existingUserId) {
+            if (!existingUser) {
               console.warn(
                 '[sim-user] Existing mode but no user found for email',
                 { email },
               )
               return null
             }
-
-            const existingUserJson = (await fetchRedis(
-              'get',
-              `user:${existingUserId}`,
-            )) as string | null
-
-            if (!existingUserJson) {
-              console.warn(
-                '[sim-user] Email mapped to id but user record missing',
-                { email, existingUserId },
-              )
-              return null
-            }
-
-            const existingUser = JSON.parse(existingUserJson) as User
 
             return {
               id: existingUser.id,
@@ -121,7 +110,7 @@ export const authOptions: NextAuthOptions = {
           }
 
           // mode === 'new' – create or reuse a simulation user.
-          let userId = existingUserId
+          let userId = existingUser?.id
 
           if (!userId) {
             userId =
@@ -136,30 +125,25 @@ export const authOptions: NextAuthOptions = {
             username,
           )}`
 
-          const userRecord: User & {
-            createdAt?: string
-            lastActive?: string
-            isOnline?: boolean
-            isSimUser?: boolean
-          } = {
+          const userRecord: Partial<AppUser> & { id: string } = {
             id: userId!,
             name: username,
             email,
             image,
-            createdAt: now,
             lastActive: now,
             isOnline: true,
             isSimUser: true,
           }
 
-          await db.set(`user:${userId}`, JSON.stringify(userRecord))
-          await db.set(emailKey, userId)
+          const saved = await saveAppUser(userRecord, {
+            source: 'sim-user-authorize',
+          })
 
           return {
-            id: userRecord.id,
-            name: userRecord.name,
-            email: userRecord.email,
-            image: userRecord.image,
+            id: saved.id,
+            name: saved.name,
+            email: saved.email,
+            image: saved.image,
           }
         } catch (error) {
           console.error('[sim-user] authorize() failed', error)
@@ -169,20 +153,47 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
-      const dbUserResult = (await fetchRedis('get', `user:${token.id}`)) as
-        | string
-        | null
+    async jwt({ token, user, account }) {
+      // Ensure token.id is always set when we have a user
+      if (user && !token.id) {
+        token.id = user.id
+      }
 
-      if (!dbUserResult) {
-        if (user) {
-          token.id = user!.id
-        }
+      const userId = token.id as string | undefined
 
+      if (!userId) {
         return token
       }
 
-      const dbUser = JSON.parse(dbUserResult) as User
+      // Try to load the AppUser from Redis
+      let dbUser = await getAppUserById(userId)
+
+      // If we don't have a stored AppUser yet but we do have a freshly
+      // authenticated user, create a canonical record now.
+      if (!dbUser && user) {
+        const provider = account?.provider ?? 'unknown'
+        const isSimUser = provider === 'sim-user'
+
+        const partial: Partial<AppUser> & { id: string } = {
+          id: user.id,
+          name: user.name ?? '',
+          email: user.email ?? '',
+          image: (user as any).image ?? '',
+          isOnline: true,
+          isSimUser,
+        }
+
+        dbUser = await saveAppUser(partial, { source: `jwt-${provider}` })
+      }
+
+      if (!dbUser) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[Auth][jwt] No AppUser found for token id', {
+            id: userId,
+          })
+        }
+        return token
+      }
 
       return {
         id: dbUser.id,

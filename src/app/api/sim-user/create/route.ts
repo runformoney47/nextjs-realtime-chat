@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
 import { fetchRedis } from '@/helpers/redis'
+import { saveAppUser } from '@/lib/user-store'
 
 export async function POST(req: Request) {
   try {
@@ -53,22 +53,20 @@ export async function POST(req: Request) {
 
     const email = `sim-${encodeURIComponent(trimmed)}@example.com`
 
-    const userRecord = {
-      id,
-      name: trimmed,
-      email,
-      // Use PNG avatars instead of SVG to avoid Next.js dangerouslyAllowSVG warnings.
-      image: `https://api.dicebear.com/7.x/avataaars/png?seed=${encodeURIComponent(
-        trimmed
-      )}`,
-      createdAt: new Date().toISOString(),
-      lastActive: new Date().toISOString(),
-      isOnline: true,
-      isSimUser: true,
-    }
-
-    await db.set(`user:${id}`, JSON.stringify(userRecord))
-    await db.set(`user:email:${email}`, id)
+    await saveAppUser(
+      {
+        id,
+        name: trimmed,
+        email,
+        // Use PNG avatars instead of SVG to avoid Next.js dangerouslyAllowSVG warnings.
+        image: `https://api.dicebear.com/7.x/avataaars/png?seed=${encodeURIComponent(
+          trimmed
+        )}`,
+        isOnline: true,
+        isSimUser: true,
+      },
+      { source: 'sim-user-create' },
+    )
 
     return NextResponse.json({
       created: true,
