@@ -4,6 +4,8 @@ import { db } from '@/lib/db'
 import { nanoid } from 'nanoid'
 import { getServerSession } from 'next-auth'
 import { pusherServer } from '@/lib/pusher'
+import { getAllAppUserIds } from '@/lib/user-store'
+import { addGroupChatId, getAllGroupChatIds, removeGroupChatIds } from '@/lib/group-chats'
 
 // The list of colors for anonymous identities
 const COLORS = ['Green', 'Yellow', 'Orange', 'Red', 'Violet']
@@ -24,25 +26,19 @@ export async function POST(req: Request) {
       message: 'Group chats are being rebuilt'
     })
 
-    // Step 1: Get all users
-    const rawUsers = await fetchRedis('keys', 'user:*') as string[]
-    const userIds = rawUsers
-      .filter(key => !key.includes(':') || key.split(':').length === 2) // Only get direct user keys
-      .map(key => key.split(':')[1]) // Extract user IDs
-    
+    // Step 1: Get all users from the canonical index
+    const userIds = await getAllAppUserIds()
+
     console.log(`Found ${userIds.length} users: ${userIds.join(', ')}`)
 
     // Archive existing group chats instead of deleting them
-    // Get all existing group chats
-    const existingGroupChatKeys = await fetchRedis('keys', 'chat:group_*') as string[]
+    // Discover existing group chats via the canonical index
+    const existingGroupChatIds = await getAllGroupChatIds()
     const existingGroupChats = []
     
-    for (const key of existingGroupChatKeys) {
-      const chatId = key.split(':')[1] // Extract chat ID from key
-      
-      // Skip group chat color keys and other related keys
-      if (chatId.includes(':')) continue
-      
+    for (const chatId of existingGroupChatIds) {
+      const key = `chat:${chatId}`
+
       try {
         const chatData = await fetchRedis('get', key) as string
         existingGroupChats.push({
@@ -113,8 +109,11 @@ export async function POST(req: Request) {
         createdAt: Date.now()
       }
       
-      // Save group chat to Redis
-      await db.set(`chat:${groupChatId}`, JSON.stringify(groupChat))
+      // Save group chat to Redis and track it in the index
+      await Promise.all([
+        db.set(`chat:${groupChatId}`, JSON.stringify(groupChat)),
+        addGroupChatId(groupChatId),
+      ])
       
       // Mark this chat as available if it has fewer than 5 members
       if (groupMembers.length < 5) {

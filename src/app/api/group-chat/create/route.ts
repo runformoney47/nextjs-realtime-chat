@@ -6,6 +6,7 @@ import { toPusherKey } from '@/lib/utils'
 import { nanoid } from 'nanoid'
 import { getServerSession } from 'next-auth'
 import { z } from 'zod'
+import { addGroupChatId } from '@/lib/group-chats'
 
 export async function POST(req: Request) {
   try {
@@ -44,11 +45,14 @@ export async function POST(req: Request) {
     await Promise.all([
       // Store group chat info
       db.set(`chat:${groupChatId}`, JSON.stringify(groupChat)),
-      
+
       // Add chat to each member's group chats list
-      ...memberIds.map(memberId => 
-        db.sadd(`user:${memberId}:group_chats`, groupChatId)
-      )
+      ...memberIds.map((memberId) =>
+        db.sadd(`user:${memberId}:group_chats`, groupChatId),
+      ),
+
+      // Track this chat id in the canonical index
+      addGroupChatId(groupChatId),
     ])
 
     // Notify all members via Pusher

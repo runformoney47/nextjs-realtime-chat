@@ -168,22 +168,38 @@ export const authOptions: NextAuthOptions = {
       // Try to load the AppUser from Redis
       let dbUser = await getAppUserById(userId)
 
-      // If we don't have a stored AppUser yet but we do have a freshly
-      // authenticated user, create a canonical record now.
-      if (!dbUser && user) {
+      // If we have a freshly authenticated user (first JWT call after login),
+      // make sure we "upgrade" whatever is in Redis (including the bare
+      // NextAuth adapter user) into our full AppUser shape so that:
+      // - Google users and temp users end up identical structurally
+      // - createdAt / lastActive / isOnline / isSimUser are always present
+      if (user) {
         const provider = account?.provider ?? 'unknown'
         const isSimUser = provider === 'sim-user'
+        const now = new Date().toISOString()
 
-        const partial: Partial<AppUser> & { id: string } = {
-          id: user.id,
-          name: user.name ?? '',
-          email: user.email ?? '',
-          image: (user as any).image ?? '',
-          isOnline: true,
-          isSimUser,
+        const needsUpgrade =
+          !dbUser ||
+          !('createdAt' in dbUser) ||
+          !('lastActive' in dbUser) ||
+          typeof dbUser.isOnline !== 'boolean'
+
+        if (needsUpgrade) {
+          const partial: Partial<AppUser> & { id: string } = {
+            id: user.id,
+            name: user.name ?? dbUser?.name ?? '',
+            email: user.email ?? dbUser?.email ?? '',
+            image: (user as any).image ?? (dbUser as any)?.image ?? '',
+            createdAt: dbUser?.createdAt ?? now,
+            lastActive: now,
+            isOnline: true,
+            isSimUser: dbUser?.isSimUser ?? isSimUser,
+          }
+
+          dbUser = await saveAppUser(partial, {
+            source: `jwt-${provider}-upgrade`,
+          })
         }
-
-        dbUser = await saveAppUser(partial, { source: `jwt-${provider}` })
       }
 
       if (!dbUser) {

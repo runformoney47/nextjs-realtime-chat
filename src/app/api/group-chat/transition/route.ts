@@ -4,6 +4,8 @@ import { db } from '@/lib/db'
 import { nanoid } from 'nanoid'
 import { getServerSession } from 'next-auth'
 import { pusherServer } from '@/lib/pusher'
+import { getAllAppUserIds } from '@/lib/user-store'
+import { addGroupChatId, getAllGroupChatIds, removeGroupChatIds } from '@/lib/group-chats'
 
 // The list of colors for anonymous identities
 const COLORS = ['Green', 'Yellow', 'Orange', 'Red', 'Violet']
@@ -48,24 +50,16 @@ export async function POST(req: Request) {
       transitionDate: transitionDate || null
     })
 
-    // Step 1: Get all users
-    const rawUsers = await fetchRedis('keys', 'user:*') as string[]
-    const userIds = rawUsers
-      .filter(key => !key.includes(':') || key.split(':').length === 2) // Only get direct user keys
-      .map(key => key.split(':')[1]) // Extract user IDs
-    
+    // Step 1: Get all users from the canonical index
+    const userIds = await getAllAppUserIds()
+
     console.log(`Found ${userIds.length} users: ${userIds.join(', ')}`)
 
     // Get existing group chats to delete them
-    const existingGroupChatKeys = await fetchRedis('keys', 'chat:group_*') as string[]
-    
+    const existingGroupChatIds = await getAllGroupChatIds()
+
     // Store user rankings before deleting group chats
-    for (const key of existingGroupChatKeys) {
-      const chatId = key.split(':')[1] // Extract chat ID from key
-      
-      // Skip group chat color keys and other related keys
-      if (chatId.includes(':')) continue
-      
+    for (const chatId of existingGroupChatIds) {
       try {
         // Find all ranking keys for this chat and preserve them
         const rankingKeys = await fetchRedis('keys', `ranking:${chatId}:*`) as string[]
@@ -80,7 +74,8 @@ export async function POST(req: Request) {
     }
     
     // Delete all group chat related keys
-    for (const key of existingGroupChatKeys) {
+    for (const chatId of existingGroupChatIds) {
+      const key = `chat:${chatId}`
       try {
         await db.del(key)
       } catch (error) {
@@ -112,7 +107,7 @@ export async function POST(req: Request) {
       for (const group of algorithmOutput) {
         if (!Array.isArray(group) || group.length === 0) continue
         
-        const groupMembers = group.filter(id => userIds.includes(id)).slice(0, 5)
+        const groupMembers = group.filter((id) => userIds.includes(id)).slice(0, 5)
         if (groupMembers.length === 0) continue
         
         const groupChatId = 'group_' + nanoid()
@@ -126,8 +121,11 @@ export async function POST(req: Request) {
           transitionDate: transitionDate || null
         }
         
-        // Save group chat to Redis
-        await db.set(`chat:${groupChatId}`, JSON.stringify(groupChat))
+        // Save group chat to Redis and track it in the index
+        await Promise.all([
+          db.set(`chat:${groupChatId}`, JSON.stringify(groupChat)),
+          addGroupChatId(groupChatId),
+        ])
         
         // Mark this chat as available if it has fewer than 5 members
         if (groupMembers.length < 5) {
@@ -187,8 +185,11 @@ export async function POST(req: Request) {
           transitionDate: transitionDate || null
         }
         
-        // Save group chat to Redis
-        await db.set(`chat:${groupChatId}`, JSON.stringify(groupChat))
+        // Save group chat to Redis and track it in the index
+        await Promise.all([
+          db.set(`chat:${groupChatId}`, JSON.stringify(groupChat)),
+          addGroupChatId(groupChatId),
+        ])
         
         // Mark this chat as available if it has fewer than 5 members
         if (groupMembers.length < 5) {
