@@ -4,16 +4,24 @@ import { saveAppUser } from '@/lib/user-store'
 
 export async function POST(req: Request) {
   try {
-    const { username } = (await req.json()) as { username?: string }
+    // Clone the request before reading the body to avoid Undici #state issues
+    // when the body stream has already been touched by internal Next.js logic.
+    let username: string | undefined
+    try {
+      const clone = req.clone()
+      const body = (await clone.json()) as { username?: string }
+      username = body.username
+    } catch {
+      username = undefined
+    }
 
     const trimmed = username?.trim()
 
-    if (!trimmed) {
-      return NextResponse.json(
-        { error: 'USERNAME_REQUIRED' },
-        { status: 400 }
-      )
-    }
+    // If no username was provided, generate a random one.
+    const finalName =
+      trimmed && trimmed.length > 0
+        ? trimmed
+        : `user-${Math.random().toString(36).slice(2, 8)}`
 
     // First, check if a user with this name already exists using the same logic
     // as /api/sim-user/check.
@@ -30,7 +38,7 @@ export async function POST(req: Request) {
 
       try {
         const parsed = JSON.parse(raw) as { id?: string; name?: string; email?: string }
-        if (parsed.name === trimmed) {
+        if (parsed.name === finalName) {
           return NextResponse.json({
             created: false,
             alreadyExists: true,
@@ -51,16 +59,16 @@ export async function POST(req: Request) {
         ? crypto.randomUUID()
         : Math.random().toString(36).slice(2)
 
-    const email = `sim-${encodeURIComponent(trimmed)}@example.com`
+    const email = `sim-${encodeURIComponent(finalName)}@example.com`
 
     await saveAppUser(
       {
         id,
-        name: trimmed,
+        name: finalName,
         email,
         // Use PNG avatars instead of SVG to avoid Next.js dangerouslyAllowSVG warnings.
         image: `https://api.dicebear.com/7.x/avataaars/png?seed=${encodeURIComponent(
-          trimmed
+          finalName,
         )}`,
         isOnline: true,
         isSimUser: true,
@@ -73,7 +81,7 @@ export async function POST(req: Request) {
       alreadyExists: false,
       user: {
         id,
-        name: trimmed,
+        name: finalName,
         email,
       },
     })

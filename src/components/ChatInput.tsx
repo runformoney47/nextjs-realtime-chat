@@ -20,7 +20,12 @@ const ChatInput: FC<ChatInputProps> = ({ chatId }) => {
     setIsLoading(true)
 
     try {
-      await axios.post('/api/message/send', { text: input, chatId })
+      const params = new URLSearchParams({
+        text: input,
+        chatId,
+      })
+
+      await axios.post(`/api/message/send?${params.toString()}`)
       setInput('')
       textareaRef.current?.focus()
     } catch (error) {

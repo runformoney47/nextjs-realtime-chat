@@ -12,6 +12,7 @@ import { getFriendsByUserId } from '@/helpers/get-friends-by-user-id'
 import SidebarChatList from '@/components/SidebarChatList'
 import MobileChatLayout from '@/components/MobileChatLayout'
 import { SidebarOption } from '@/types/typings'
+import GroupChatTransitionListener from '@/components/GroupChatTransitionListener'
 
 interface LayoutProps {
   children: ReactNode
@@ -29,6 +30,12 @@ const sidebarOptions: SidebarOption[] = [
     name: 'Add friend',
     href: '/dashboard/add',
     Icon: 'UserPlus',
+  },
+  {
+    id: 3,
+    name: 'Health debug',
+    href: '/dashboard/admin/health',
+    Icon: 'RefreshCw',
   },
 ]
 
@@ -61,6 +68,8 @@ const Layout = async ({ children }: LayoutProps) => {
 
   return (
     <div className='w-full flex h-screen'>
+      {/* Global listener for group chat transitions */}
+      <GroupChatTransitionListener sessionUserId={session.user.id} />
       <div className='md:hidden'>
         <MobileChatLayout
           friends={friends}

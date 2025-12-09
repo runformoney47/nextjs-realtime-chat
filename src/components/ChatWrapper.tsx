@@ -7,10 +7,8 @@ import { Message } from '@/lib/validations/message'
 import { Users, BarChart2 } from 'lucide-react'
 import Image from 'next/image'
 import UserRankingSidebar from './UserRankingSidebar'
-import GroupChatLoadingState from './GroupChatLoadingState'
 import { useRouter } from 'next/navigation'
 import { toast } from 'react-hot-toast'
-import { pusherClient } from '@/lib/pusher'
 
 interface ChatWrapperProps {
   chatId: string
@@ -38,36 +36,8 @@ const ChatWrapper: FC<ChatWrapperProps> = ({
   members = []
 }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(isGroupChat && chatId.startsWith('group_'))
   const router = useRouter()
 
-  // Function to handle when the group chat is ready
-  const handleChatReady = () => {
-    setIsLoading(false)
-  }
-  
-  // Listen for global transition events
-  useEffect(() => {
-    if (isGroupChat && chatId.startsWith('group_')) {
-      const globalChannel = pusherClient.subscribe('global_notifications')
-      
-      const handleTransitionStarted = () => {
-        // Immediately show loading state
-        setIsLoading(true)
-        toast.loading('Group chats are being rebuilt...', {
-          id: 'chat-transition-toast',
-          duration: 5000
-        })
-      }
-      
-      globalChannel.bind('group_chat_transition_started', handleTransitionStarted)
-      
-      return () => {
-        pusherClient.unsubscribe('global_notifications')
-      }
-    }
-  }, [isGroupChat, chatId])
-  
   // Check if this is the user's current group chat - simplified to prevent redirect loops
   useEffect(() => {
     if (isGroupChat && chatId.startsWith('group_')) {
@@ -108,11 +78,6 @@ const ChatWrapper: FC<ChatWrapperProps> = ({
       checkCurrentChat()
     }
   }, [isGroupChat, chatId, sessionId]) // Removed router and isCheckingCurrent dependencies
-
-  // Show loading state if it's a group chat and still loading
-  if (isLoading) {
-    return <GroupChatLoadingState chatId={chatId} onChatReady={handleChatReady} />
-  }
 
   return (
     <div className='flex-1 justify-between flex flex-col h-screen'>

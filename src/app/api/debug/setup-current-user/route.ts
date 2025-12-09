@@ -3,6 +3,7 @@ import { isAdmin } from '@/lib/admin'
 import { db } from '@/lib/db'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { saveAppUser } from '@/lib/user-store'
 
 export async function POST() {
   try {
@@ -30,8 +31,20 @@ export async function POST() {
       isAdmin: true
     }
 
-    // Store the user record
-    await db.set(`user:${session.user.id}`, JSON.stringify(userRecord))
+    // Store the user record and register it in the canonical user index
+    await saveAppUser(
+      {
+        id: userRecord.id,
+        name: userRecord.name,
+        email: userRecord.email,
+        image: userRecord.image,
+        createdAt: userRecord.createdAt,
+        lastActive: userRecord.lastActive,
+        isOnline: userRecord.isOnline,
+        isSimUser: false,
+      },
+      { source: 'debug-setup-current-user' },
+    )
 
     // Add some additional test users
     const testUsers = [
@@ -64,9 +77,21 @@ export async function POST() {
       }
     ]
 
-    // Store test users
+    // Store test users and register them in the canonical user index
     for (const user of testUsers) {
-      await db.set(`user:${user.id}`, JSON.stringify(user))
+      await saveAppUser(
+        {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          createdAt: user.createdAt,
+          lastActive: user.lastActive,
+          isOnline: user.isOnline,
+          isSimUser: true,
+        },
+        { source: 'debug-setup-current-user' },
+      )
     }
 
     // Add some test groups

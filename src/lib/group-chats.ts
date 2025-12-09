@@ -48,5 +48,34 @@ export async function getAllGroupChatIds(): Promise<string[]> {
   return legacyIds
 }
 
+/**
+ * Given a list of user ids, randomly partition them into groups of
+ * at most `groupSize`. Any remaining users form a final smaller group.
+ *
+ * Example: 8 users, groupSize = 5 → [5 users], [3 users].
+ */
+export function buildRandomGroups(
+  userIds: string[],
+  groupSize = 5,
+): string[][] {
+  if (groupSize <= 0) {
+    throw new Error('groupSize must be greater than 0')
+  }
 
+  // Deduplicate and shuffle via Fisher–Yates for unbiased random groups
+  const deduped = Array.from(new Set(userIds))
+  const shuffled = [...deduped]
+
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+
+  const groups: string[][] = []
+  for (let i = 0; i < shuffled.length; i += groupSize) {
+    groups.push(shuffled.slice(i, i + groupSize))
+  }
+
+  return groups
+}
 

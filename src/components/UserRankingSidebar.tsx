@@ -1,7 +1,7 @@
 'use client'
 
 import { FC, useState, useEffect } from 'react'
-import { XIcon } from 'lucide-react'
+import { X } from 'lucide-react'
 import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd'
 import { toast } from 'react-hot-toast'
 
@@ -157,7 +157,7 @@ const UserRankingSidebar: FC<UserRankingSidebarProps> = ({
       <div className="p-4 border-b border-gray-200 flex justify-between items-center">
         <h2 className="font-semibold text-lg">Rank Users</h2>
         <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-          <XIcon className="h-5 w-5" />
+          <X className="h-5 w-5" />
         </button>
       </div>
 

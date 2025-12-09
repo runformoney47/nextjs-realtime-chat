@@ -60,7 +60,12 @@ const Messages: FC<MessagesProps> = ({
 
     const messageHandler = (message: Message) => {
       console.log('New message received:', message)
-      setMessages((prev) => [message, ...prev])
+      setMessages((prev) => {
+        // Avoid duplicates and keep messages sorted by timestamp
+        const exists = prev.some((m) => m.id === message.id)
+        const next = exists ? prev : [...prev, message]
+        return [...next].sort((a, b) => a.timestamp - b.timestamp)
+      })
     }
 
     channel.bind('incoming-message', messageHandler)
@@ -79,8 +84,7 @@ const Messages: FC<MessagesProps> = ({
   return (
     <div
       id='messages'
-      className='flex h-full flex-1 flex-col-reverse gap-4 p-3 overflow-y-auto scrollbar-thumb-blue scrollbar-thumb-rounded scrollbar-track-blue-lighter scrollbar-w-2 scrolling-touch'>
-      <div ref={scrollDownRef} />
+      className='flex h-full flex-1 flex-col gap-4 p-3 overflow-y-auto scrollbar-thumb-blue scrollbar-thumb-rounded scrollbar-track-blue-lighter scrollbar-w-2 scrolling-touch'>
 
       {messages.map((message, index) => {
         const isCurrentUser = message.senderId === sessionId
@@ -203,6 +207,7 @@ const Messages: FC<MessagesProps> = ({
           </div>
         )
       })}
+      <div ref={scrollDownRef} />
     </div>
   )
 }

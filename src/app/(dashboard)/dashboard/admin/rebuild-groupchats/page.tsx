@@ -10,10 +10,46 @@ interface PageProps {}
 
 const RebuildGroupChatsPage: FC<PageProps> = ({}) => {
   const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [isAddingUser, setIsAddingUser] = useState<boolean>(false)
   const [result, setResult] = useState<any>(null)
   const [transitionDate, setTransitionDate] = useState<string>('')
   const [transitionStep, setTransitionStep] = useState<string>('')
   const router = useRouter()
+
+  const handleAddRandomUser = async () => {
+    if (isAddingUser) return
+    setIsAddingUser(true)
+
+    try {
+      // Simple random name generator – good enough for test data.
+      const baseNames = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Gamma']
+      const base = baseNames[Math.floor(Math.random() * baseNames.length)]
+      const suffix = Math.floor(Math.random() * 10_000)
+      const username = `${base}-${suffix}`
+
+      const response = await fetch('/api/sim-user/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.created) {
+        toast.error('Failed to add random user.')
+        return
+      }
+
+      toast.success(`Added user "${data.user.name}" (${data.user.id}).`)
+    } catch (error) {
+      console.error('Error adding random user:', error)
+      toast.error('Failed to add random user. See console for details.')
+    } finally {
+      setIsAddingUser(false)
+    }
+  }
 
   const handleRebuild = async () => {
     setIsLoading(true)
@@ -138,6 +174,18 @@ const RebuildGroupChatsPage: FC<PageProps> = ({}) => {
           </p>
         </div>
         
+        {/* Controls */}
+        <div className='flex items-center gap-4 mb-8'>
+          <Button
+            isLoading={isAddingUser}
+            type='button'
+            onClick={handleAddRandomUser}
+            disabled={isLoading || isAddingUser}
+          >
+            Add user with random name
+          </Button>
+        </div>
+
         {isLoading ? (
           <div className="bg-white p-4 rounded-md shadow-sm border border-gray-200 mb-8">
             <div className="flex items-center mb-4">

@@ -1,4 +1,12 @@
 'use client'
+// This file is the /login page (App Router) and is a CLIENT component because:
+// - It uses hooks (state, effects, router).
+// - It calls the NextAuth client `signIn` helper.
+// It renders two flows:
+//   1) Google OAuth (NextAuth Google provider).
+//   2) A "Temporary Account Simulator" using the custom NextAuth credentials provider "sim-user".
+// The sim-user flow logs events (for debugging), persists them to sessionStorage, and mirrors to a debug
+// endpoint in development. After successful sign-in, it redirects to /dashboard.
 
 import Button from '@/components/ui/Button'
 import clsx from 'clsx'
@@ -9,8 +17,13 @@ import { toast } from 'react-hot-toast'
 
 type SimLogLevel = 'info' | 'warn' | 'error' | 'debug'
 
+// Key for sessionStorage where we keep a short rolling log of sim-user events
 const SIM_LOG_STORAGE_KEY = 'simUserLogs'
 
+/**
+ * On mount, replay any sim-user logs from a previous attempt
+ * so you can see the trail in the console if the page was reloaded.
+ */
 function replayStoredLogs() {
   if (typeof window === 'undefined') {
     return
@@ -53,6 +66,7 @@ type SimLogEntry = {
   payload?: unknown
 }
 
+// Main login page component
 const Page: FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [isSimLoading, setIsSimLoading] = useState<boolean>(false)
@@ -62,11 +76,13 @@ const Page: FC = () => {
   const [username, setUsername] = useState<string>('')
   const router = useRouter()
 
+  // Disable buttons whenever a login flow is in progress
   const loginDisabled = useMemo(
     () => isLoading || isSimLoading,
     [isLoading, isSimLoading]
   )
 
+  // Google OAuth flow via NextAuth
   async function loginWithGoogle() {
     setIsLoading(true)
     try {
@@ -79,10 +95,12 @@ const Page: FC = () => {
     }
   }
 
+  // On mount, replay any stored sim-user logs from previous attempts
   useEffect(() => {
     replayStoredLogs()
   }, [])
 
+  // Helper to log sim-user events (console + sessionStorage + optional server mirror)
   const logSimEvent = useCallback(
     (level: SimLogLevel, message: string, payload?: unknown) => {
       const entry: SimLogEntry = {
@@ -151,6 +169,7 @@ const Page: FC = () => {
     []
   )
 
+  // Track which temp-user mode is selected
   const handleSelectMode = (mode: 'new' | 'existing') => {
     const snapshot = {
       timestamp: new Date().toISOString(),
@@ -172,6 +191,7 @@ const Page: FC = () => {
     setSelectedMode(mode)
   }
 
+  // Main handler for the temp account flow (sim-user credentials provider)
   async function loginWithSimulationUser() {
     setIsSimLoading(true)
     const interactionId =
