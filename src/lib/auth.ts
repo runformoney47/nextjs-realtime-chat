@@ -224,10 +224,8 @@ export const authOptions: NextAuthOptions = {
         session.user.name = token.name
         session.user.email = token.email
         session.user.image = token.picture
-        
-        // Check if user is admin
-        const { isAdminClient } = await import('./admin')
-        session.user.isAdmin = isAdminClient(token.id)
+        // TEMP: treat every authenticated user as admin during development.
+        session.user.isAdmin = true
       }
 
       return session

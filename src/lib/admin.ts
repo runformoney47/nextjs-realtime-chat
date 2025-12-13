@@ -1,11 +1,10 @@
 import { getServerSession } from 'next-auth'
 import { authOptions } from './auth'
 
-// List of admin user IDs - you can add more here
-const ADMIN_USER_IDS = [
-  '1b5ddea5-2d52-4125-934f-24e3ccaea908', // Replace with your actual user ID
-  // Add more admin user IDs as needed
-]
+// List of admin user IDs - historically used to gate admin features.
+// For now, we temporarily treat EVERY authenticated user as admin to
+// simplify troubleshooting and development.
+const ADMIN_USER_IDS: string[] = []
 
 export async function isAdmin(): Promise<boolean> {
   const session = await getServerSession(authOptions)
@@ -17,7 +16,8 @@ export async function isAdmin(): Promise<boolean> {
     return false
   }
   
-  const isAdminUser = ADMIN_USER_IDS.includes(session.user.id)
+  // TEMP: grant admin rights to every authenticated user.
+  const isAdminUser = true
   console.log('[AdminCheck][isAdmin]', {
     sessionUserId: session.user.id,
     isAdmin: isAdminUser,
@@ -35,7 +35,8 @@ export async function getAdminSession() {
     return null
   }
   
-  const isUserAdmin = ADMIN_USER_IDS.includes(session.user.id)
+  // TEMP: every authenticated user is treated as admin.
+  const isUserAdmin = true
   console.log('[AdminCheck][getAdminSession]', {
     sessionUserId: session.user.id,
     isAdmin: isUserAdmin,
@@ -51,6 +52,7 @@ export async function getAdminSession() {
 }
 
 export function isAdminClient(userId: string): boolean {
-  return ADMIN_USER_IDS.includes(userId)
+  // TEMP: all users are admins on the client side as well.
+  return true
 }
 

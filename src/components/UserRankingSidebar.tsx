@@ -119,21 +119,21 @@ const UserRankingSidebar: FC<UserRankingSidebarProps> = ({
 
     setUsers(updatedUsers)
 
-    // Save the updated rankings to the backend
+    // Save the updated rankings to the backend.
+    // To avoid Undici/Next.js body stream issues, we send the payload
+    // via query parameters instead of a JSON request body.
     setIsSaving(true)
     try {
-      const response = await fetch('/api/rankings', {
+      const rankingsPayload = updatedUsers.map((user) => ({
+        userId: user.id,
+        position: user.position,
+      }))
+
+      const params = new URLSearchParams()
+      params.set('rankings', JSON.stringify(rankingsPayload))
+
+      const response = await fetch(`/api/rankings/${chatId}?${params.toString()}`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          chatId,
-          rankings: updatedUsers.map(user => ({
-            userId: user.id,
-            position: user.position
-          }))
-        }),
       })
 
       if (!response.ok) {
