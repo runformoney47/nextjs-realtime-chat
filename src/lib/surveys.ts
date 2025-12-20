@@ -49,6 +49,58 @@ export interface TransitionRankingInput {
   transitionTimestamp: number
 }
 
+export interface PeerRatings1to10Input {
+  userId: string
+  chatId: string
+  studyId?: string | null
+  sessionId?: string | null
+  /**
+   * Ratings of *other* users in the groupchat on a 1-10 scale.
+   * `targetUserId` must not equal `userId`.
+   */
+  ratings: { targetUserId: string; rating: number }[]
+  timepoint?: string | null
+}
+
+export interface PeerRatingZScoreRecord {
+  targetUserId: string
+  rawRating: number
+  zScore: number
+}
+
+export interface PeerRatingsZScoreStats {
+  n: number
+  mean: number
+  stdDev: number
+  stdDevType: 'population'
+}
+
+export function computePeerRatingsZScores(
+  ratings: { targetUserId: string; rating: number }[],
+): { stats: PeerRatingsZScoreStats; zScored: PeerRatingZScoreRecord[] } {
+  const n = ratings.length
+  const mean = n === 0 ? 0 : ratings.reduce((sum, r) => sum + r.rating, 0) / n
+  const variance =
+    n === 0
+      ? 0
+      : ratings.reduce((sum, r) => {
+          const d = r.rating - mean
+          return sum + d * d
+        }, 0) / n
+  const stdDev = Math.sqrt(variance)
+
+  const zScored: PeerRatingZScoreRecord[] = ratings.map((r) => ({
+    targetUserId: r.targetUserId,
+    rawRating: r.rating,
+    zScore: stdDev > 0 ? (r.rating - mean) / stdDev : 0,
+  }))
+
+  return {
+    stats: { n, mean, stdDev, stdDevType: 'population' },
+    zScored,
+  }
+}
+
 /**
  * Persist a survey response as an immutable record and update
  * useful indexes for later querying/export.
@@ -207,5 +259,31 @@ export async function saveTransitionRanking(
   })
 }
 
+/**
+ * Record a 1-10 peer rating survey as a SurveyResponse, storing each target's
+ * rating as a z-score normalized within the current rater's distribution.
+ *
+ * surveyId = "peer-rating-zscore"
+ */
+export async function savePeerRatingsZScore(
+  input: PeerRatings1to10Input,
+): Promise<SurveyResponse> {
+  const { stats, zScored } = computePeerRatingsZScores(input.ratings)
+
+  return saveSurveyResponse({
+    userId: input.userId,
+    chatId: input.chatId,
+    studyId: input.studyId ?? null,
+    sessionId: input.sessionId ?? null,
+    surveyId: 'peer-rating-zscore',
+    surveyVersion: 1,
+    timepoint: input.timepoint ?? 'in-session',
+    answers: {
+      scale: { min: 1, max: 10 },
+      stats,
+      ratings: zScored,
+    },
+  })
+}
 
 

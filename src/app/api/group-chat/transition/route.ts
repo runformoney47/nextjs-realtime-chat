@@ -111,7 +111,10 @@ export async function POST(req: Request) {
       }
     }
 
-    const userIds = Array.from(new Set([...indexedUserIds, ...usersFromChats]))
+    // Avoid downlevel Set iteration issues in TS builds by explicitly arrayifying inputs.
+    const userIds = Array.from(
+      new Set([...Array.from(indexedUserIds), ...Array.from(usersFromChats)]),
+    )
 
     console.log(
       `[GroupChatTransition] All users to (re)assign (${userIds.length}):`,
