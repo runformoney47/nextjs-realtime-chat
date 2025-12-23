@@ -224,8 +224,13 @@ export const authOptions: NextAuthOptions = {
         session.user.name = token.name
         session.user.email = token.email
         session.user.image = token.picture
-        // TEMP: treat every authenticated user as admin during development.
-        session.user.isAdmin = true
+        
+        // Check if user is admin:
+        // - Google users (real emails) are admins
+        // - Sim users (emails ending with @example.com) are regular users
+        const email = token.email || ''
+        const isSimUser = email.endsWith('@example.com')
+        session.user.isAdmin = !isSimUser
       }
 
       return session

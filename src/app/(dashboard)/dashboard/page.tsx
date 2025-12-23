@@ -2,7 +2,8 @@ import { getFriendsByUserId } from '@/helpers/get-friends-by-user-id'
 import { fetchRedis } from '@/helpers/redis'
 import { authOptions } from '@/lib/auth'
 import { chatHrefConstructor } from '@/lib/utils'
-import { ChevronRight } from 'lucide-react'
+import { db } from '@/lib/db'
+import { ChevronRight, MessageSquare } from 'lucide-react'
 import { getServerSession } from 'next-auth'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -12,11 +13,34 @@ const page = async ({}) => {
   const session = await getServerSession(authOptions)
   if (!session) notFound()
 
+  const isAdmin = session.user.isAdmin === true
+
   console.log('[AdminCheck][DashboardPage]', {
     sessionUserId: session.user.id,
     isAdmin: session.user.isAdmin,
   })
 
+  // For regular users, check if they have a current group chat and redirect them
+  if (!isAdmin) {
+    const currentGroupChatId = await db.get(`user:${session.user.id}:current_group_chat`) as string | null
+    
+    if (!currentGroupChatId) {
+      // Show "No groupchat" page for regular users without a group chat
+      return (
+        <div className='flex flex-col items-center justify-center h-full'>
+          <MessageSquare className='h-16 w-16 text-gray-300 mb-4' />
+          <h1 className='text-2xl font-semibold text-gray-700'>No Group Chat</h1>
+          <p className='mt-2 text-gray-500'>You are not currently assigned to a group chat.</p>
+        </div>
+      )
+    }
+    
+    // Redirect regular users to their current group chat
+    const { redirect } = await import('next/navigation')
+    redirect(`/dashboard/chat/${currentGroupChatId}`)
+  }
+
+  // Admin view - show recent chats
   const friends = await getFriendsByUserId(session.user.id)
 
   const friendsWithLastMessage = await Promise.all(

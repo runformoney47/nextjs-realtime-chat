@@ -14,6 +14,7 @@ export async function POST(req: Request) {
     const url = new URL(req.url)
     const chatId = url.searchParams.get('chatId') ?? ''
     const text = url.searchParams.get('text') ?? ''
+    const clientMessageId = url.searchParams.get('id') ?? ''
 
     if (!text || !chatId) {
       return new Response('Invalid request payload', { status: 400 })
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
 
       const timestamp = Date.now()
       const messageData: Message = {
-        id: nanoid(),
+        id: clientMessageId || nanoid(),
         senderId: session.user.id,
         text,
         timestamp,
@@ -92,7 +93,7 @@ export async function POST(req: Request) {
       const timestamp = Date.now()
 
       const messageData: Message = {
-        id: nanoid(),
+        id: clientMessageId || nanoid(),
         senderId: session.user.id,
         text,
         timestamp,
