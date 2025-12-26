@@ -131,7 +131,7 @@ export async function PUT(req: Request) {
     // 2) Build random schedule over those ids
     const schedule: Schedule = []
 
-    function shuffled<T>(arr: T[]): T[] {
+    const shuffled = <T,>(arr: T[]): T[] => {
       const copy = [...arr]
       for (let i = copy.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1))

@@ -12,7 +12,7 @@ const config: CapacitorConfig = {
   bundledWebRuntime: false,
   server: {
     // TODO: set this to your deployed URL, e.g. https://your-app.vercel.app
-    url: 'https://example.com',
+    url: process.env.CAPACITOR_SERVER_URL || 'https://example.com',
     cleartext: false,
   },
 }

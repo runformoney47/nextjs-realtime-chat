@@ -354,8 +354,9 @@ const RebuildGroupChatsPage: FC<PageProps> = ({}) => {
               ))}
             </select>
             <p className='text-xs text-gray-500 mt-1'>
-              Choose a day index (0 – {currentSchedule.length - 1}). When set, "Advance to Next Group
-              Chat Set" will assign users using that day of the schedule instead of random groups.
+              Choose a day index (0 – {currentSchedule.length - 1}). When set, &quot;Advance to Next
+              Group Chat Set&quot; will assign users using that day of the schedule instead of random
+              groups.
             </p>
           </div>
         )}

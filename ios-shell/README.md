@@ -26,6 +26,12 @@ npm install
 Edit `ios-shell/capacitor.config.ts` and set:
 - `server.url` to your deployed site, e.g. `https://your-app.vercel.app`
 
+Or set an env var for the commands below:
+
+```bash
+export CAPACITOR_SERVER_URL="https://your-app.vercel.app"
+```
+
 ## 3) Add iOS + open Xcode
 
 ```bash

@@ -122,7 +122,14 @@ export async function POST(req: Request) {
       }
     }
 
-    const userIds = Array.from(new Set([...indexedUserIds, ...usersFromChats]))
+    // Avoid spreading Sets directly (TS target ES5 in this repo).
+    // Convert to arrays first, then de-dupe.
+    const userIds = Array.from(
+      new Set<string>([
+        ...Array.from(indexedUserIds),
+        ...Array.from(usersFromChats),
+      ]),
+    )
 
     console.log(
       `[GroupChatTransition] All users to (re)assign (${userIds.length}):`,

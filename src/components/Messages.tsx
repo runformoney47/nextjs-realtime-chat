@@ -142,7 +142,8 @@ const Messages: FC<MessagesProps> = ({
         }
 
         const data = (await res.json()) as { messages?: Message[] }
-        if (!data.messages || !Array.isArray(data.messages)) return
+        const serverMessages = Array.isArray(data.messages) ? data.messages : null
+        if (!serverMessages) return
 
         setMessages((prev) => {
           const byId = new Map<string, Message>()
@@ -151,7 +152,7 @@ const Messages: FC<MessagesProps> = ({
             byId.set(m.id, m)
           }
           // Merge in any from the server
-          for (const m of data.messages) {
+          for (const m of serverMessages) {
             const existing = byId.get(m.id)
             if (!existing || existing.timestamp !== m.timestamp || existing.text !== m.text) {
               byId.set(m.id, m)

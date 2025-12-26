@@ -30,6 +30,13 @@ yarn-error.log*
 # vercel
 .vercel
 
+# capacitor (ios shell)
+/ios-shell/ios/
+/ios-shell/android/
+/ios-shell/.capacitor/
+/ios-shell/.idea/
+/ios-shell/.vscode/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
