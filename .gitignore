@@ -31,6 +31,7 @@ yarn-error.log*
 .vercel
 
 # capacitor (ios shell)
+/ios-shell/node_modules/
 /ios-shell/ios/
 /ios-shell/android/
 /ios-shell/.capacitor/

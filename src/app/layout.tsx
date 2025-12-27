@@ -14,6 +14,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang='en'>
+      <head>
+        {/* iOS / WKWebView: prevent auto-zoom + pinch-zoom and use safe areas */}
+        <meta
+          name='viewport'
+          content='width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'
+        />
+      </head>
       <body>
         <Providers>{children}</Providers>
       </body>

@@ -120,7 +120,7 @@ const ChatInput: FC<ChatInputProps> = ({ chatId, sessionId }) => {
   }
 
   return (
-    <div className='border-t border-gray-200 px-4 py-3'>
+    <div className='border-t border-gray-200 px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]'>
       <div className='flex items-center rounded-full border border-gray-300 bg-white px-4 py-2 shadow-sm'>
         <TextareaAutosize
           ref={textareaRef}
@@ -135,7 +135,8 @@ const ChatInput: FC<ChatInputProps> = ({ chatId, sessionId }) => {
           value={input}
           onChange={(e) => handleInputChange(e.target.value)}
           placeholder='Type a message'
-          className='flex-1 resize-none border-0 bg-transparent text-gray-900 placeholder:text-gray-400 focus:ring-0 text-sm leading-6'
+          // iOS Safari/WKWebView auto-zooms inputs <16px; keep at least 16px for stable UX.
+          className='flex-1 resize-none border-0 bg-transparent text-gray-900 placeholder:text-gray-400 focus:ring-0 text-[16px] leading-6'
         />
 
         <Button

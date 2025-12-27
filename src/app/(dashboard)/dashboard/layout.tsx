@@ -62,7 +62,7 @@ const Layout = async ({ children }: LayoutProps) => {
   // Admin view with sidebar
   if (isAdmin) {
     return (
-      <div className='w-full flex h-screen overflow-hidden'>
+      <div className='w-full flex h-[100dvh] overflow-hidden'>
         {/* Global listener for group chat transitions */}
         <GroupChatTransitionListener sessionUserId={session.user.id} />
         <div className='md:hidden'>
@@ -92,7 +92,7 @@ const Layout = async ({ children }: LayoutProps) => {
 
   // User view - simple layout with navigation spheres
   return (
-    <div className='w-full flex flex-col h-screen overflow-hidden'>
+    <div className='w-full flex flex-col h-[100dvh] overflow-hidden'>
       {/* Global listener for group chat transitions */}
       <GroupChatTransitionListener sessionUserId={session.user.id} />
       

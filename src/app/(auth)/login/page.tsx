@@ -394,7 +394,8 @@ const Page: FC = () => {
                   type='text'
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
-                  className='w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400'
+                  // iOS Safari/WKWebView auto-zooms inputs <16px; keep at least 16px for stable UX.
+                  className='w-full rounded-md border border-gray-300 px-3 py-2 text-[16px] shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400'
                   placeholder='e.g. user123'
                   autoComplete='off'
                   disabled={loginDisabled}

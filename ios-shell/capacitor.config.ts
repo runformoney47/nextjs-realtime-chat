@@ -14,6 +14,9 @@ const config: CapacitorConfig = {
     // TODO: set this to your deployed URL, e.g. https://your-app.vercel.app
     url: process.env.CAPACITOR_SERVER_URL || 'https://example.com',
     cleartext: false,
+    // Helpful during development if you navigate to other allowed URLs.
+    // Keep this conservative for production.
+    allowNavigation: ['*.vercel.app'],
   },
 }
 
