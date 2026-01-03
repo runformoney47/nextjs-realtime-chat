@@ -120,7 +120,7 @@ const ChatInput: FC<ChatInputProps> = ({ chatId, sessionId }) => {
   }
 
   return (
-    <div className='border-t border-gray-200 px-4 pt-3 pb-[calc(var(--sab)+0.75rem)]'>
+    <div className='border-t border-gray-200 px-4 pt-3 pb-[calc(var(--sab-fixed)+0.75rem)]'>
       <div className='flex items-center rounded-full border border-gray-300 bg-white px-4 py-2 shadow-sm'>
         <TextareaAutosize
           ref={textareaRef}

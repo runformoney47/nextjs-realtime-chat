@@ -81,7 +81,7 @@ const ChatWrapper: FC<ChatWrapperProps> = ({
 
   return (
     <div className='flex-1 justify-between flex flex-col h-full'>
-      <div className='sticky top-0 z-40 bg-white flex sm:items-center justify-between pt-[calc(var(--sat)+0.75rem)] pb-3 px-4 border-b-2 border-gray-200'>
+      <div className='sticky top-0 z-40 bg-white flex sm:items-center justify-between pt-[calc(var(--sat-fixed)+0.75rem)] pb-3 px-4 border-b-2 border-gray-200'>
         <div className='relative flex items-center space-x-4'>
           {/* Only show the image for direct chats, not group chats */}
           {!isGroupChat && (

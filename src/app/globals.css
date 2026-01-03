@@ -15,12 +15,16 @@
   :root {
     --sat: 0px; /* safe-area top */
     --sab: 0px; /* safe-area bottom */
+    --sat-fixed: 0px; /* safe-area top with iOS fallback minimums */
+    --sab-fixed: 0px; /* safe-area bottom with iOS fallback minimums */
   }
 
   @supports (padding-top: constant(safe-area-inset-top)) {
     :root {
       --sat: constant(safe-area-inset-top);
       --sab: constant(safe-area-inset-bottom);
+      --sat-fixed: constant(safe-area-inset-top);
+      --sab-fixed: constant(safe-area-inset-bottom);
     }
   }
 
@@ -28,6 +32,20 @@
     :root {
       --sat: env(safe-area-inset-top);
       --sab: env(safe-area-inset-bottom);
+      --sat-fixed: env(safe-area-inset-top);
+      --sab-fixed: env(safe-area-inset-bottom);
+    }
+  }
+
+  /**
+   * Some WKWebView setups report `safe-area-inset-*` as 0 even when content
+   * is drawn under the status bar / notch. On iOS only, apply conservative
+   * minimums so tappable UI never ends up obscured.
+   */
+  @supports (-webkit-touch-callout: none) {
+    :root {
+      --sat-fixed: max(var(--sat), 44px);
+      --sab-fixed: max(var(--sab), 34px);
     }
   }
 
