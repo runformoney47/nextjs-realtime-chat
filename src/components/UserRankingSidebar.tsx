@@ -153,15 +153,15 @@ const UserRankingSidebar: FC<UserRankingSidebarProps> = ({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-y-0 right-0 w-64 bg-white shadow-lg border-l border-gray-200 z-10 transition-transform transform ease-in-out duration-300">
-      <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+    <div className="fixed top-0 bottom-0 right-0 w-64 bg-white shadow-lg border-l border-gray-200 z-[70] transition-transform transform ease-in-out duration-300 pt-[var(--sat-fixed)] pb-[var(--sab-fixed)] flex flex-col">
+      <div className="p-4 border-b border-gray-200 flex justify-between items-center shrink-0">
         <h2 className="font-semibold text-lg">Rank Users</h2>
         <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
           <X className="h-5 w-5" />
         </button>
       </div>
 
-      <div className="p-4">
+      <div className="p-4 flex-1 overflow-y-auto">
         <p className="text-sm text-gray-600 mb-4">
           Drag to rank users in this group chat:
         </p>

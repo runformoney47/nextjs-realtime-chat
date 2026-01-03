@@ -44,7 +44,8 @@
    */
   @supports (-webkit-touch-callout: none) {
     :root {
-      --sat-fixed: max(var(--sat), 44px);
+      /* 59px is the common safe-area top inset on Dynamic Island devices */
+      --sat-fixed: max(var(--sat), 59px);
       --sab-fixed: max(var(--sab), 34px);
     }
   }
