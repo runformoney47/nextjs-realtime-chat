@@ -28,7 +28,7 @@ const UserNavigation: FC<UserNavigationProps> = ({ currentGroupChatId, userName 
   }
 
   return (
-    <div className="flex items-center justify-between px-4 py-4 border-b border-gray-200 bg-white">
+    <div className="sticky top-0 z-50 flex items-center justify-between px-4 pt-[calc(var(--sat)+1rem)] pb-4 border-b border-gray-200 bg-white">
       {/* Username and logout on left */}
       <div className="flex items-center gap-3">
         <span className="text-sm font-medium text-gray-700">{userName || 'User'}</span>

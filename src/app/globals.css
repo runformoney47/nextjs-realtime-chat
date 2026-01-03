@@ -3,6 +3,44 @@
 @tailwind utilities;
 
 @layer base {
+  /**
+   * iOS safe-area helpers
+   *
+   * - `env(safe-area-inset-*)` is the modern syntax.
+   * - `constant(safe-area-inset-*)` is the legacy Safari syntax (still relevant in some WKWebView setups).
+   *
+   * We expose both as CSS variables so components can use `var(--sat)` / `var(--sab)`
+   * without duplicating fallback logic in class strings.
+   */
+  :root {
+    --sat: 0px; /* safe-area top */
+    --sab: 0px; /* safe-area bottom */
+  }
+
+  @supports (padding-top: constant(safe-area-inset-top)) {
+    :root {
+      --sat: constant(safe-area-inset-top);
+      --sab: constant(safe-area-inset-bottom);
+    }
+  }
+
+  @supports (padding-top: env(safe-area-inset-top)) {
+    :root {
+      --sat: env(safe-area-inset-top);
+      --sab: env(safe-area-inset-bottom);
+    }
+  }
+
+  html,
+  body {
+    height: 100%;
+    /* Prevent the whole document from scrolling (iOS tends to "bounce"/shift on input focus). */
+    overflow: hidden;
+    overscroll-behavior-y: none;
+    /* Keep text sizing stable on iOS */
+    -webkit-text-size-adjust: 100%;
+  }
+
   container {
     @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8
   }

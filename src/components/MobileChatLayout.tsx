@@ -31,7 +31,7 @@ const MobileChatLayout: FC<MobileChatLayoutProps> = ({ friends, session, sidebar
   }, [pathname])
 
   return (
-    <div className='fixed bg-zinc-50 border-b border-zinc-200 top-0 inset-x-0 py-2 px-4'>
+    <div className='fixed bg-zinc-50 border-b border-zinc-200 top-0 inset-x-0 pt-[calc(var(--sat)+0.5rem)] pb-2 px-4'>
       <div className='w-full flex justify-end items-center'>
         <Button onClick={() => setOpen(true)} className='gap-4'>
           Menu <Menu className='h-6 w-6' />
