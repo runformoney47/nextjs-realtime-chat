@@ -1,0 +1,407 @@
+{
+  "label_definition": "v1_same_cohort_is_friend",
+  "cohorts": 5,
+  "cohort_size": 20,
+  "agents": [
+    {
+      "agent_id": "a_c0_00",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_01",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_02",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_03",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_04",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_05",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_06",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_07",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_08",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_09",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_10",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_11",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_12",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_13",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_14",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_15",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_16",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_17",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_18",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c0_19",
+      "cohort_id": "c0"
+    },
+    {
+      "agent_id": "a_c1_00",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_01",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_02",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_03",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_04",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_05",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_06",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_07",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_08",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_09",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_10",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_11",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_12",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_13",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_14",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_15",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_16",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_17",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_18",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c1_19",
+      "cohort_id": "c1"
+    },
+    {
+      "agent_id": "a_c2_00",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_01",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_02",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_03",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_04",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_05",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_06",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_07",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_08",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_09",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_10",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_11",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_12",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_13",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_14",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_15",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_16",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_17",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_18",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c2_19",
+      "cohort_id": "c2"
+    },
+    {
+      "agent_id": "a_c3_00",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_01",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_02",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_03",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_04",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_05",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_06",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_07",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_08",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_09",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_10",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_11",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_12",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_13",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_14",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_15",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_16",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_17",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_18",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c3_19",
+      "cohort_id": "c3"
+    },
+    {
+      "agent_id": "a_c4_00",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_01",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_02",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_03",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_04",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_05",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_06",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_07",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_08",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_09",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_10",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_11",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_12",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_13",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_14",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_15",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_16",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_17",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_18",
+      "cohort_id": "c4"
+    },
+    {
+      "agent_id": "a_c4_19",
+      "cohort_id": "c4"
+    }
+  ]
+}

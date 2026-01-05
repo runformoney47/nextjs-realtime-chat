@@ -1,0 +1,36 @@
+{
+  "run_id": "run_2026-01-05T01-19-45-875Z_seed_1337",
+  "created_at": "2026-01-05T01:19:45.882Z",
+  "config": {
+    "cohorts": 5,
+    "cohortSize": 20,
+    "groupSize": 5,
+    "days": 14,
+    "tickMinutes": 5,
+    "baseMsgRatePerHour": 0.6,
+    "maxBurstBonus": 1.8,
+    "rankingAtMinute": 1320,
+    "dailyOpinionAtMinute": 1320,
+    "opinionInit": {
+      "warmth": 0,
+      "respect": 0,
+      "humor": 0,
+      "trust": 0,
+      "interest_overlap": 0
+    },
+    "opinionLearningRate": 0.12,
+    "opinionNoise": 0.08,
+    "affinityWeights": {
+      "warmth": 0.3,
+      "respect": 0.25,
+      "humor": 0.15,
+      "trust": 0.15,
+      "interest_overlap": 0.15
+    },
+    "seed": 1337
+  },
+  "notes": [
+    "Local-only simulation; no API calls; event log is the dataset source of truth.",
+    "Messages are template strings; rankings derived from latent affinity matrix."
+  ]
+}
