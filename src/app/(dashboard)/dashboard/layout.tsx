@@ -57,6 +57,12 @@ const Layout = async ({ children }: LayoutProps) => {
       href: '/dashboard/admin/rebuild-groupchats',
       Icon: 'RefreshCw',
     },
+    {
+      id: 4,
+      name: 'Group Chats',
+      href: '/dashboard/admin/groupchats',
+      Icon: 'RefreshCw',
+    },
   ]
 
   // Admin view with sidebar

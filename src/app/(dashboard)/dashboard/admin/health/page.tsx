@@ -1,8 +1,10 @@
 import { authOptions } from '@/lib/auth'
 import { getServerSession } from 'next-auth'
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { getAllAppUserIds } from '@/lib/user-store'
 import { fetchRedis } from '@/helpers/redis'
+import AgentSetupButton from '@/components/AgentSetupButton'
 
 interface UserHealthRow {
   id: string
@@ -12,11 +14,19 @@ interface UserHealthRow {
   groupMembers: string[]
 }
 
+
+//The "Promise" of this function is an arraw of UserHealthRows
 async function getHealthData(): Promise<UserHealthRow[]> {
+
+  //starts with pulling all the UserIds
   const userIds = await getAllAppUserIds()
 
+
+  //once this is populated it will be returned
   const rows: UserHealthRow[] = []
 
+
+  
   for (const userId of userIds) {
     try {
       const rawUser = (await fetchRedis('get', `user:${userId}`)) as string | null
@@ -96,6 +106,18 @@ export default async function HealthPage() {
         Temporary troubleshooting view. Shows each known user, their current groupchat, and the
         members of that chat according to Redis.
       </p>
+
+      <div className='mb-8'>
+        <AgentSetupButton />
+        <div className='mt-3'>
+          <Link
+            href='/dashboard/admin/groupchats'
+            className='inline-flex items-center rounded bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800'
+          >
+            Inspect group chats
+          </Link>
+        </div>
+      </div>
 
       <div className='overflow-x-auto rounded border border-gray-200 bg-white'>
         <table className='min-w-full text-sm'>

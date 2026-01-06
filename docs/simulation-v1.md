@@ -73,4 +73,72 @@ From repo root:
 npm run sim:agents
 ```
 
+## Agent Setup (local app)
+If you are running the Next.js app locally with `AGENT_MODE=true`, an admin can use the
+**Agent Setup** button on:
+- `/dashboard/admin/health`
+
+It will:
+- clear sim-related Redis keys (chats/rankings/schedule/user assignments)
+- create users with ids/names **0..99**
+- create 20 group chats of 5 users and assign each user a `current_group_chat`
+
+Then you can instantly log in as an agent with:
+- `/agent/login?userId=0` (or 1..99)
+
+## Primitive “agents in the system” (bots sending messages + rankings)
+For an extremely simple first pass, we expose agent-only endpoints (gated by `AGENT_MODE`):
+- `GET /api/agent/state?userId=...`
+- `GET /api/agent/messages?userId=...&chatId=...&limit=...`
+- `POST /api/agent/send?userId=...&chatId=...&text=...`
+- `POST /api/agent/rank?userId=...&chatId=...&rankings=<json>`
+
+Recommended env vars (local):
+- `AGENT_MODE=true`
+- `AGENT_API_SECRET=<some-random-string>`
+
+Run the primitive runner (assumes your app is running at `http://localhost:3000`):
+```bash
+AGENT_MODE=true AGENT_API_SECRET=dev-secret npm run agents:run
+```
+
+### LLM-driven messages (optional)
+If you set these env vars, the runners can generate message content via an OpenAI-compatible
+`/chat/completions` endpoint:
+- `AGENT_USE_LLM=true`
+- `OPENAI_API_KEY=...`
+- `OPENAI_MODEL=gpt-4o-mini` (or any model your provider supports)
+- `OPENAI_BASE_URL=https://api.openai.com/v1` (optional; for OpenAI-compatible providers)
+
+Optional knobs:
+- `AGENT_BASE_URL` (default `http://localhost:3000`)
+- `AGENT_MESSAGES` (default `200`)
+- `AGENT_RANK_EVERY` (default `25`)
+
+## Day-by-day schedule advancement
+`Agent Setup` writes:
+- `schedule:master`: array of **epochs**, where each epoch is an array of groups
+- `schedule:epoch_length`: how many **days** each group chat lasts (default **3**)
+
+We track the currently-applied day in Redis:
+- `schedule:current_day` (starts at `-1`)
+- `group_chats:active` tracks the currently-active group chats for the current epoch
+
+To advance to the next day:
+- the day counter increments every time
+- **group chats only rebuild when the epoch changes** (every 3 days by default)
+```bash
+AGENT_MODE=true AGENT_API_SECRET=dev-secret npm run schedule:advance
+```
+
+To apply a specific day:
+```bash
+AGENT_MODE=true AGENT_API_SECRET=dev-secret npm run schedule:advance -- --day=0
+```
+
+To run activity day-by-day:
+```bash
+AGENT_MODE=true AGENT_API_SECRET=dev-secret SIM_DAYS=3 MESSAGES_PER_DAY=200 npm run agents:daybyday
+```
+
 

@@ -54,17 +54,83 @@ if (!process.env.NEXTAUTH_URL) {
 
 export const authOptions: NextAuthOptions = {
   adapter: UpstashRedisAdapter(db),
+  // IMPORTANT: NextAuth debug logs can print sensitive fields (e.g. provider clientSecret).
+  // Only enable when explicitly requested.
+  debug: process.env.NEXTAUTH_DEBUG === 'true',
   session: {
     strategy: 'jwt',
   },
   secret: process.env.NEXTAUTH_SECRET,
   pages: {
     signIn: '/login',
+    error: '/login',
+  },
+  logger: {
+    error(code, metadata) {
+      // Never log secrets/tokens. NextAuth metadata can contain provider/account payloads.
+      const redact = (value: unknown): unknown => {
+        if (!value) return value
+        if (typeof value === 'string') {
+          // redact long token-ish strings
+          if (value.length > 60) return '[REDACTED]'
+          return value
+        }
+        if (Array.isArray(value)) return value.map(redact)
+        if (typeof value === 'object') {
+          const out: Record<string, unknown> = {}
+          for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+            const key = k.toLowerCase()
+            if (
+              key.includes('secret') ||
+              key.includes('token') ||
+              key.includes('id_token') ||
+              key.includes('access_token') ||
+              key.includes('refresh_token')
+            ) {
+              out[k] = '[REDACTED]'
+            } else {
+              out[k] = redact(v)
+            }
+          }
+          return out
+        }
+        return value
+      }
+
+      console.error('[NextAuth][logger.error]', code, redact(metadata))
+    },
+    warn(code) {
+      console.warn('[NextAuth][logger.warn]', code)
+    },
+    debug(code, metadata) {
+      // Only output debug logs when explicitly requested.
+      if (process.env.NEXTAUTH_DEBUG === 'true') {
+        console.log('[NextAuth][logger.debug]', code, metadata ? '[metadata omitted]' : '')
+      }
+    },
+  },
+  events: {
+    async error(message) {
+      // message can contain nested data; keep it minimal
+      console.error('[NextAuth][event.error]', {
+        name: (message as any)?.name,
+        message: (message as any)?.message,
+      })
+    },
   },
   providers: [
     GoogleProvider({
       clientId: getGoogleCredentials().clientId,
       clientSecret: getGoogleCredentials().clientSecret,
+      // In this codebase we store "real" users (Gmail) in Redis and treat them as admins.
+      // Because the Upstash NextAuth adapter uses the same `user:*` keys, it's possible to
+      // have an existing user record by email without an OAuth account link yet. In that
+      // case NextAuth throws OAuthAccountNotLinked unless we allow linking by email.
+      //
+      // Keep this dev-only by default; you can explicitly enable in prod if desired.
+      allowDangerousEmailAccountLinking:
+        process.env.ALLOW_DANGEROUS_EMAIL_ACCOUNT_LINKING === 'true' ||
+        process.env.NODE_ENV === 'development',
     }),
     CredentialsProvider({
       id: 'sim-user',

@@ -12,6 +12,7 @@ import Button from '@/components/ui/Button'
 import clsx from 'clsx'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { FC, useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-hot-toast'
 
@@ -75,6 +76,7 @@ const Page: FC = () => {
   )
   const [username, setUsername] = useState<string>('')
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   // Disable buttons whenever a login flow is in progress
   const loginDisabled = useMemo(
@@ -86,9 +88,12 @@ const Page: FC = () => {
   async function loginWithGoogle() {
     setIsLoading(true)
     try {
-      await signIn('google')
+      // Use NextAuth client helper to start OAuth (it handles the correct request method/flow).
+      // NextAuth will redirect to Google and then back to /api/auth/callback/google.
+      await signIn('google', { callbackUrl: '/dashboard', redirect: true })
     } catch (error) {
       // display error message to user
+      console.error('[GoogleSignIn] Unexpected error', error)
       toast.error('Something went wrong with your login.')
     } finally {
       setIsLoading(false)
@@ -99,6 +104,33 @@ const Page: FC = () => {
   useEffect(() => {
     replayStoredLogs()
   }, [])
+
+  // If NextAuth redirects back to /login?error=..., surface it as a toast.
+  useEffect(() => {
+    const err = searchParams?.get('error')
+    const provider = searchParams?.get('provider')
+
+    if (err) {
+      console.error('[NextAuth][Login] error query param', { err, provider })
+
+      if (err === 'google') {
+        // NextAuth sometimes redirects back with error=<providerId>.
+        // Treat it as "Google sign-in failed to start/complete" rather than a literal error code.
+        toast.error(
+          'Google sign-in failed. Check GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET and that your Google OAuth redirect URI includes /api/auth/callback/google.',
+        )
+      } else if (err === 'OAuthAccountNotLinked') {
+        toast.error(
+          'Google sign-in failed (OAuthAccountNotLinked). This email already exists under a different sign-in method.',
+        )
+      } else {
+        toast.error(`Login failed: ${err}${provider ? ` (${provider})` : ''}`)
+      }
+    } else if (provider) {
+      // Sometimes NextAuth may redirect with provider info; surface it for debugging.
+      console.warn('[NextAuth][Login] provider query param', provider)
+    }
+  }, [searchParams])
 
   // Helper to log sim-user events (console + sessionStorage + optional server mirror)
   const logSimEvent = useCallback(
