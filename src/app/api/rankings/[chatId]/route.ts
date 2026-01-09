@@ -34,7 +34,12 @@ export async function GET(
     }
 
     // Get the user's rankings from Redis
-    const rankingsKey = `chat:${chatId}:user:${session.user.id}:rankings`
+    const url = new URL(req.url)
+    const typeParam = (url.searchParams.get('type') ?? '').trim()
+    const rankingType = typeParam && /^[a-zA-Z0-9_-]{1,40}$/.test(typeParam) ? typeParam : ''
+    const rankingsKey = rankingType
+      ? `chat:${chatId}:user:${session.user.id}:rankings:${rankingType}`
+      : `chat:${chatId}:user:${session.user.id}:rankings`
 
     // Try to get the stored rankings
     let rankings
@@ -50,6 +55,7 @@ export async function GET(
     return new Response(
       JSON.stringify({
         rankings: parsedRankings,
+        rankingType: rankingType || 'heuristic',
       }),
       {
         headers: {
@@ -90,6 +96,8 @@ export async function POST(
     // Parse rankings from query param to avoid body stream issues.
     const url = new URL(req.url)
     const rankingsParam = url.searchParams.get('rankings') ?? ''
+    const typeParam = (url.searchParams.get('type') ?? '').trim()
+    const rankingType = typeParam && /^[a-zA-Z0-9_-]{1,40}$/.test(typeParam) ? typeParam : ''
 
     let rankings: { userId: string; position: number }[] = []
     try {
@@ -143,7 +151,9 @@ export async function POST(
       .map((r) => r.userId)
 
     // Save the user's rankings in Redis for fast in-app access
-    const rankingsKey = `chat:${chatId}:user:${session.user.id}:rankings`
+    const rankingsKey = rankingType
+      ? `chat:${chatId}:user:${session.user.id}:rankings:${rankingType}`
+      : `chat:${chatId}:user:${session.user.id}:rankings`
     await db.set(rankingsKey, JSON.stringify(rankings))
 
     // Best-effort: also record as ranking transition + snapshot
@@ -161,7 +171,7 @@ export async function POST(
         userId: session.user.id,
         chatId,
         studyId: null,
-        sessionId: 'ad-hoc', // can be refined to real session/transition id later
+        sessionId: rankingType ? `ad-hoc:${rankingType}` : 'ad-hoc', // can be refined to real session/transition id later
         ranking: rankings,
         transitionTimestamp: Date.now(),
       })
@@ -173,6 +183,7 @@ export async function POST(
       JSON.stringify({
         success: true,
         message: 'Rankings saved successfully',
+        rankingType: rankingType || 'heuristic',
       }),
       {
         headers: {

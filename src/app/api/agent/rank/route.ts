@@ -49,7 +49,7 @@ const rankingsArraySchema = z.array(
 )
 
 /**
- * POST /api/agent/rank?userId=...&chatId=...&rankings=<json>
+ * POST /api/agent/rank?userId=...&chatId=...&rankings=<json>&type=<optional>
  * Agent-only rankings submit for sim users (no NextAuth cookie needed).
  */
 export async function POST(req: Request) {
@@ -61,6 +61,8 @@ export async function POST(req: Request) {
     const userId = url.searchParams.get('userId') ?? ''
     const chatId = url.searchParams.get('chatId') ?? ''
     const rankingsParam = url.searchParams.get('rankings') ?? ''
+    const typeParam = (url.searchParams.get('type') ?? 'heuristic').trim()
+    const rankingType = /^[a-zA-Z0-9_-]{1,40}$/.test(typeParam) ? typeParam : 'heuristic'
 
     if (!userId || !chatId) {
       return NextResponse.json({ error: 'userId and chatId are required' }, { status: 400 })
@@ -93,12 +95,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'User is not a member of this chat' }, { status: 403 })
     }
 
-    // Load previous rankings
+    const rankingsKey =
+      rankingType === 'heuristic'
+        ? `chat:${chatId}:user:${userId}:rankings`
+        : `chat:${chatId}:user:${userId}:rankings:${rankingType}`
+
+    // Load previous rankings (same type)
     let beforeOrder: string[] = []
     try {
-      const prevRaw = (await fetchRedis('get', `chat:${chatId}:user:${userId}:rankings`)) as
-        | string
-        | null
+      const prevRaw = (await fetchRedis('get', rankingsKey)) as string | null
       if (prevRaw) {
         const prevArr = JSON.parse(prevRaw) as { userId: string; position: number }[]
         beforeOrder = prevArr
@@ -115,7 +120,12 @@ export async function POST(req: Request) {
       .sort((a, b) => a.position - b.position)
       .map((r) => r.userId)
 
-    await db.set(`chat:${chatId}:user:${userId}:rankings`, JSON.stringify(rankings))
+    await db.set(rankingsKey, JSON.stringify(rankings))
+
+    // Back-compat: keep writing heuristic to the legacy key
+    if (rankingType === 'heuristic' && rankingsKey !== `chat:${chatId}:user:${userId}:rankings`) {
+      await db.set(`chat:${chatId}:user:${userId}:rankings`, JSON.stringify(rankings))
+    }
 
     // Best-effort analytics trail
     try {
@@ -123,7 +133,7 @@ export async function POST(req: Request) {
         userId,
         chatId,
         studyId: null,
-        sessionId: null,
+        sessionId: rankingType === 'heuristic' ? null : `agent:${rankingType}`,
         before: beforeOrder,
         after: afterOrder,
       })
@@ -131,7 +141,7 @@ export async function POST(req: Request) {
         userId,
         chatId,
         studyId: null,
-        sessionId: 'agent',
+        sessionId: rankingType === 'heuristic' ? 'agent' : `agent:${rankingType}`,
         ranking: rankings,
         transitionTimestamp: Date.now(),
       })
@@ -139,7 +149,7 @@ export async function POST(req: Request) {
       console.warn('[Agent][Rank] Failed to save survey analytics', e)
     }
 
-    return NextResponse.json({ ok: true }, { status: 200 })
+    return NextResponse.json({ ok: true, rankingType }, { status: 200 })
   } catch (error) {
     console.error('[Agent][Rank] Failed', error)
     return NextResponse.json({ error: 'Failed to save rankings' }, { status: 500 })

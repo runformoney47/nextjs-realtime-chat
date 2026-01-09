@@ -92,6 +92,8 @@ For an extremely simple first pass, we expose agent-only endpoints (gated by `AG
 - `GET /api/agent/messages?userId=...&chatId=...&limit=...`
 - `POST /api/agent/send?userId=...&chatId=...&text=...`
 - `POST /api/agent/rank?userId=...&chatId=...&rankings=<json>`
+- `GET /api/agent/opinions?userId=...&chatId=...`
+- `POST /api/agent/opinions?userId=...&chatId=...&dayIndex=...&opinions=<json>`
 
 Recommended env vars (local):
 - `AGENT_MODE=true`
@@ -140,5 +142,36 @@ To run activity day-by-day:
 ```bash
 AGENT_MODE=true AGENT_API_SECRET=dev-secret SIM_DAYS=3 MESSAGES_PER_DAY=200 npm run agents:daybyday
 ```
+
+## Opinions + end-of-day rankings
+During `agents:daybyday`, at the end of each simulated day each agent:
+- updates a **single** opinion scalar about each other member:
+  - `interest_overlap` in `[-1, +1]`
+- submits a ranking (position 1 = best) via `/api/agent/rank` derived from that scalar
+
+Redis keys:
+- `agent_opinion:user:<me>:about:<other>` → JSON with the opinion vector + metadata
+- `agent_opinion_snapshot:user:<me>:chat:<chatId>:day:<dayIndex>` → per-day snapshot (optional)
+- `chat:<chatId>:user:<me>:rankings` → ranking array for UI
+- `chat:<chatId>:user:<me>:rankings:compat_llm` → optional LLM “compatibility” ranking (stored separately)
+- `survey:*` indexes record ranking transitions/snapshots (see `src/lib/surveys.ts`)
+
+### Fast feedback mode (rankings update after every message)
+In `scripts/run-agents-daybyday.mjs`, after each agent sends a message, we recompute:
+- `interest_overlap` per other member using a **keyword overlap heuristic** based on the agent's `style.interests`
+- the ranking derived from those scores
+
+### Optional LLM-based compatibility ranking (alternate)
+This asks the LLM: “Read the chats and, based on your interests/personality, rank members most compatible → least compatible.”
+
+Enable it (example: rank every 10 messages total across the run):
+```bash
+AGENT_USE_LLM=true AGENT_COMPAT_RANK_LLM=true AGENT_COMPAT_RANK_EVERY=10 npm run agents:daybyday
+```
+
+It will submit rankings to:
+- `/api/agent/rank?type=compat_llm`
+- Redis key `chat:<chatId>:user:<me>:rankings:compat_llm`
+
 
 

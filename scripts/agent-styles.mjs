@@ -17,6 +17,7 @@ export const STYLE_CATALOG = [
       do: ['ask simple follow-ups', 'acknowledge others', 'keep tone light'],
       dont: ['be overly formal', 'write long paragraphs', 'mention being an AI'],
     },
+    interests: ['music', 'movies', 'food', 'travel', 'sports', 'funny', 'weekend'],
     policy: {
       // Two modes:
       // - "reply": pick a specific person/message to respond to (turn-taking)
@@ -40,6 +41,7 @@ export const STYLE_CATALOG = [
       do: ['ask “why/how” questions', 'summarize what someone said', 'stay calm'],
       dont: ['be snarky', 'ramble', 'mention being an AI'],
     },
+    interests: ['technology', 'science', 'books', 'learning', 'debate', 'ideas', 'how'],
     policy: {
       modeMix: { reply: 0.8, contribute: 0.2 },
       replyToMostRecent: true,
@@ -59,6 +61,7 @@ export const STYLE_CATALOG = [
       do: ['use mild jokes', 'be warm', 'avoid sarcasm that could be hurtful'],
       dont: ['use emojis', 'be cruel', 'mention being an AI'],
     },
+    interests: ['jokes', 'games', 'memes', 'stories', 'weird', 'fun', 'banter'],
     policy: {
       modeMix: { reply: 0.6, contribute: 0.4 },
       replyToMostRecent: true,
@@ -78,6 +81,7 @@ export const STYLE_CATALOG = [
       do: ['be concise', 'give actionable takes', 'avoid drama'],
       dont: ['write long explanations', 'over-personalize', 'mention being an AI'],
     },
+    interests: ['work', 'plans', 'goals', 'strategy', 'productivity', 'fitness', 'money'],
     policy: {
       modeMix: { reply: 0.65, contribute: 0.35 },
       replyToMostRecent: true,
@@ -97,6 +101,7 @@ export const STYLE_CATALOG = [
       do: ['validate', 'encourage', 'ask gentle questions'],
       dont: ['be dismissive', 'be overly intense', 'mention being an AI'],
     },
+    interests: ['people', 'relationships', 'feelings', 'support', 'mental', 'life', 'health'],
     policy: {
       modeMix: { reply: 0.75, contribute: 0.25 },
       replyToMostRecent: true,
