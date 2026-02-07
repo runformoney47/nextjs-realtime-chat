@@ -25,11 +25,19 @@ const RebuildGroupChatsPage: FC<PageProps> = ({}) => {
   const [selectedScheduleDay, setSelectedScheduleDay] = useState<number | null>(null)
   const router = useRouter()
 
+
+
+  //!!!!!
   useEffect(() => {
     const fetchSchedule = async () => {
       try {
+        //hmmm so it calls the page api/schedule?????? interestingnnngg
         const res = await fetch('/api/schedule')
+
+        //if it aint okay, gtfo
         if (!res.ok) return
+
+        //res.json() as schedule 
         const data = (await res.json()) as { schedule: Schedule | null }
         setCurrentSchedule(data.schedule)
       } catch (error) {

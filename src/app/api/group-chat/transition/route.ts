@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     try {
       if (req.headers.get('content-type')?.includes('application/json')) {
         // Clone the request before reading the body to avoid Undici #state issues
-        const clone = req.clone()
+        const clone = req.clone() 
         const body = (await clone.json()) as {
           transitionDate?: string | null
           algorithmOutput?: unknown

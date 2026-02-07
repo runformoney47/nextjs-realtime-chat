@@ -19,7 +19,7 @@ import { NextResponse } from 'next/server'
 export default withAuth(
   async function middleware(req) {
     const pathname = req.nextUrl.pathname
-
+    
     // Check if the user has a valid NextAuth token (JWT session).
     const isAuth = await getToken({ req })
     const isLoginPage = pathname.startsWith('/login')
