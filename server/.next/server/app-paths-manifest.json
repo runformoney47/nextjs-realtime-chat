@@ -1,0 +1,6 @@
+{
+  "/api/ranking/route": "app/api/ranking/route.js",
+  "/api/message/list/route": "app/api/message/list/route.js",
+  "/api/chat/current/route": "app/api/chat/current/route.js",
+  "/api/chat/list/route": "app/api/chat/list/route.js"
+}
