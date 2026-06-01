@@ -7,12 +7,22 @@ export async function fetchRedis(
   command: Command,
   ...args: (string | number)[]
 ) {
-  const commandUrl = `${upstashRedisRestUrl}/${command}/${args.join('/')}`
+  if (!upstashRedisRestUrl || !authToken) {
+    throw new Error(
+      'Missing Upstash Redis configuration. Please set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN.',
+    )
+  }
+
+  // Encode all arguments to make sure special characters in keys
+  // (colons, asterisks, spaces, etc.) never break the REST URL.
+  const encodedArgs = args.map((arg) => encodeURIComponent(String(arg)))
+  const commandUrl = `${upstashRedisRestUrl}/${command}/${encodedArgs.join('/')}`
 
   const response = await fetch(commandUrl, {
     headers: {
       Authorization: `Bearer ${authToken}`,
     },
+    // These calls are used for live chat state, so we always bypass any caches.
     cache: 'no-store',
   })
 

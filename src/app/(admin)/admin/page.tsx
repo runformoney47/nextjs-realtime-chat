@@ -224,16 +224,49 @@ export default async function AdminDashboard() {
       {/* Quick Actions */}
       <div className="bg-white shadow rounded-lg p-6">
         <h2 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <button className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
-            View All Users
-          </button>
-          <button className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
-            Manage Groups
-          </button>
-          <button className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600">
-            Start Simulation
-          </button>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <a
+            href="/api/admin/export?type=users"
+            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 text-center"
+          >
+            Export users
+          </a>
+          <a
+            href="/api/admin/export?type=groupChats"
+            className="bg-indigo-500 text-white px-4 py-2 rounded hover:bg-indigo-600 text-center"
+          >
+            Export group chats
+          </a>
+          <a
+            href="/api/admin/export?type=messages"
+            className="bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600 text-center"
+          >
+            Export messages
+          </a>
+          <a
+            href="/api/admin/export?type=surveys"
+            className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 text-center"
+          >
+            Export survey responses
+          </a>
+          <a
+            href="/api/admin/export?type=rankingTransitions"
+            className="bg-pink-500 text-white px-4 py-2 rounded hover:bg-pink-600 text-center"
+          >
+            Export ranking-transition
+          </a>
+          <a
+            href="/api/admin/export?type=transitionRankings"
+            className="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600 text-center"
+          >
+            Export transition-ranking
+          </a>
+          <a
+            href="/api/admin/export"
+            className="bg-gray-800 text-white px-4 py-2 rounded hover:bg-gray-900 text-center"
+          >
+            Export all data
+          </a>
         </div>
       </div>
     </div>

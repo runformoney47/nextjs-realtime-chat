@@ -4,6 +4,8 @@ import { db } from '@/lib/db'
 import { nanoid } from 'nanoid'
 import { getServerSession } from 'next-auth'
 import { pusherServer } from '@/lib/pusher'
+import { getAllAppUserIds } from '@/lib/user-store'
+import { addGroupChatId, getAllGroupChatIds, buildRandomGroups } from '@/lib/group-chats'
 
 // The list of colors for anonymous identities
 const COLORS = ['Green', 'Yellow', 'Orange', 'Red', 'Violet']
@@ -27,9 +29,25 @@ export async function POST(req: Request) {
 
     console.log('Starting group chat transition...')
 
-    // Parse the request body for any transition parameters
-    const body = await req.json()
-    const { transitionDate, algorithmOutput } = body
+    // Parse the request body for any transition parameters, but never fail if it’s malformed.
+    let transitionDate: string | null = null
+    let algorithmOutput: unknown = null
+    try {
+      if (req.headers.get('content-type')?.includes('application/json')) {
+        // Clone the request before reading the body to avoid Undici #state issues
+        const clone = req.clone()
+        const body = (await clone.json()) as {
+          transitionDate?: string | null
+          algorithmOutput?: unknown
+        }
+        transitionDate = body.transitionDate ?? null
+        algorithmOutput = body.algorithmOutput ?? null
+      }
+    } catch {
+      // Treat any parse error as "no transition params provided"
+      transitionDate = null
+      algorithmOutput = null
+    }
 
     // Notify all connected clients that group chats are being transitioned
     // First, collect additional data for the notification
@@ -39,33 +57,27 @@ export async function POST(req: Request) {
       email: session.user.email || 'Unknown'
     }
 
-    console.log('Notifying all users about group chat transition')
-    await pusherServer.trigger('global_notifications', 'group_chat_update', {
-      eventType: 'rebuild',
+    console.log('Notifying all users about group chat transition (started)')
+    await pusherServer.trigger('global_notifications', 'group_chat_transition_started', {
       timestamp: Date.now(),
       message: 'Group chats are transitioning to new sets',
       initiatedBy: adminUser,
-      transitionDate: transitionDate || null
+      transitionDate: transitionDate || null,
     })
 
-    // Step 1: Get all users
-    const rawUsers = await fetchRedis('keys', 'user:*') as string[]
-    const userIds = rawUsers
-      .filter(key => !key.includes(':') || key.split(':').length === 2) // Only get direct user keys
-      .map(key => key.split(':')[1]) // Extract user IDs
-    
-    console.log(`Found ${userIds.length} users: ${userIds.join(', ')}`)
+    // Step 1: Get all users from the canonical index
+    const indexedUserIds = await getAllAppUserIds()
 
-    // Get existing group chats to delete them
-    const existingGroupChatKeys = await fetchRedis('keys', 'chat:group_*') as string[]
-    
+    console.log(
+      `[GroupChatTransition] Indexed user ids (${indexedUserIds.length}):`,
+      indexedUserIds.join(', '),
+    )
+
+    // Also discover any users that appear as members of existing group chats.
+    const existingGroupChatIds = await getAllGroupChatIds()
+
     // Store user rankings before deleting group chats
-    for (const key of existingGroupChatKeys) {
-      const chatId = key.split(':')[1] // Extract chat ID from key
-      
-      // Skip group chat color keys and other related keys
-      if (chatId.includes(':')) continue
-      
+    for (const chatId of existingGroupChatIds) {
       try {
         // Find all ranking keys for this chat and preserve them
         const rankingKeys = await fetchRedis('keys', `ranking:${chatId}:*`) as string[]
@@ -79,8 +91,39 @@ export async function POST(req: Request) {
       }
     }
     
+    // Build a superset of all users that have ever been in a group chat
+    // plus those in the canonical index, so we never "lose" anyone just
+    // because they weren't added to users:all yet.
+    const usersFromChats = new Set<string>()
+    for (const chatId of existingGroupChatIds) {
+      try {
+        const raw = (await fetchRedis('get', `chat:${chatId}`)) as string | null
+        if (!raw) continue
+
+        const chat = JSON.parse(raw) as GroupChat
+        if (Array.isArray(chat.members)) {
+          for (const memberId of chat.members) {
+            usersFromChats.add(memberId)
+          }
+        }
+      } catch (error) {
+        console.error(`[GroupChatTransition] Failed to read members for ${chatId}:`, error)
+      }
+    }
+
+    // Avoid downlevel Set iteration issues in TS builds by explicitly arrayifying inputs.
+    const userIds = Array.from(
+      new Set([...Array.from(indexedUserIds), ...Array.from(usersFromChats)]),
+    )
+
+    console.log(
+      `[GroupChatTransition] All users to (re)assign (${userIds.length}):`,
+      userIds.join(', '),
+    )
+    
     // Delete all group chat related keys
-    for (const key of existingGroupChatKeys) {
+    for (const chatId of existingGroupChatIds) {
+      const key = `chat:${chatId}`
       try {
         await db.del(key)
       } catch (error) {
@@ -91,7 +134,7 @@ export async function POST(req: Request) {
     // Clear the available group chats set
     await db.del('available_group_chats')
     
-    // Clear user's current group chat settings
+    // Clear user's current group chat settings for everyone we know about
     for (const userId of userIds) {
       await db.del(`user:${userId}:current_group_chat`)
       
@@ -99,135 +142,71 @@ export async function POST(req: Request) {
       await db.del(`user:${userId}:group_chats`)
     }
 
-    // Create new group chats
+    // Create new group chats using a simple random grouping algorithm:
+    // take all users, randomly partition into groups of up to 5. Any
+    // remainder forms a smaller final group.
     const groupChats = []
     let currentUserChatId = null
-    
-    // Check if we have algorithm output to use
-    if (algorithmOutput && Array.isArray(algorithmOutput) && algorithmOutput.length > 0) {
-      console.log('Using provided algorithm output for group assignments')
-      
-      // Process the algorithm's output
-      // Expected format: Array of arrays, each inner array contains user IDs for one group
-      for (const group of algorithmOutput) {
-        if (!Array.isArray(group) || group.length === 0) continue
-        
-        const groupMembers = group.filter(id => userIds.includes(id)).slice(0, 5)
-        if (groupMembers.length === 0) continue
-        
-        const groupChatId = 'group_' + nanoid()
-        
-        const groupChat = {
-          id: groupChatId,
-          name: '',
-          creatorId: session.user.id,
-          members: groupMembers,
-          createdAt: Date.now(),
-          transitionDate: transitionDate || null
+
+    const randomGroups = buildRandomGroups(userIds, 5)
+
+    for (const groupMembers of randomGroups) {
+      if (groupMembers.length === 0) continue
+
+      const groupChatId = 'group_' + nanoid()
+
+      const groupChat = {
+        id: groupChatId,
+        name: '',
+        creatorId: session.user.id,
+        members: groupMembers,
+        createdAt: Date.now(),
+        transitionDate: transitionDate || null
+      }
+
+      // Save group chat to Redis and track it in the index
+      await Promise.all([
+        db.set(`chat:${groupChatId}`, JSON.stringify(groupChat)),
+        addGroupChatId(groupChatId),
+      ])
+
+      // Mark this chat as available if it has fewer than 5 members
+      if (groupMembers.length < 5) {
+        await db.sadd('available_group_chats', groupChatId)
+      }
+
+      // Assign colors to each member
+      const colorAssignments = []
+      for (let j = 0; j < groupMembers.length; j++) {
+        const memberId = groupMembers[j]
+        const color = COLORS[j]
+
+        // Store the color in Redis
+        await db.set(`chat:${groupChatId}:user:${memberId}:color`, color)
+
+        // Add this chat to the user's group chats
+        await db.sadd(`user:${memberId}:group_chats`, groupChatId)
+
+        // Set as user's current group chat
+        await db.set(`user:${memberId}:current_group_chat`, groupChatId)
+
+        // Track the current user's new chat ID
+        if (memberId === session.user.id) {
+          currentUserChatId = groupChatId
+          console.log(`Set current user's new chat to: ${currentUserChatId}`)
         }
-        
-        // Save group chat to Redis
-        await db.set(`chat:${groupChatId}`, JSON.stringify(groupChat))
-        
-        // Mark this chat as available if it has fewer than 5 members
-        if (groupMembers.length < 5) {
-          await db.sadd('available_group_chats', groupChatId)
-        }
-        
-        // Assign colors to each member
-        const colorAssignments = []
-        for (let j = 0; j < groupMembers.length; j++) {
-          const memberId = groupMembers[j]
-          const color = COLORS[j]
-          
-          // Store the color in Redis
-          await db.set(`chat:${groupChatId}:user:${memberId}:color`, color)
-          
-          // Add this chat to the user's group chats
-          await db.sadd(`user:${memberId}:group_chats`, groupChatId)
-          
-          // Set as user's current group chat
-          await db.set(`user:${memberId}:current_group_chat`, groupChatId)
-          
-          // Track the current user's new chat ID
-          if (memberId === session.user.id) {
-            currentUserChatId = groupChatId
-            console.log(`Set current user's new chat to: ${currentUserChatId}`)
-          }
-          
-          colorAssignments.push({
-            userId: memberId,
-            color
-          })
-        }
-        
-        groupChats.push({
-          chatId: groupChatId,
-          members: groupMembers,
-          colorAssignments
+
+        colorAssignments.push({
+          userId: memberId,
+          color
         })
       }
-    } else {
-      console.log('No algorithm output provided, using default group assignment')
-      
-      // Shuffle the user IDs to create new random groups
-      const shuffledUserIds = [...userIds].sort(() => Math.random() - 0.5)
-      
-      // Split users into groups of 5
-      for (let i = 0; i < shuffledUserIds.length; i += 5) {
-        const groupMembers = shuffledUserIds.slice(i, i + 5)
-        const groupChatId = 'group_' + nanoid()
-        
-        const groupChat = {
-          id: groupChatId,
-          name: '',
-          creatorId: session.user.id,
-          members: groupMembers,
-          createdAt: Date.now(),
-          transitionDate: transitionDate || null
-        }
-        
-        // Save group chat to Redis
-        await db.set(`chat:${groupChatId}`, JSON.stringify(groupChat))
-        
-        // Mark this chat as available if it has fewer than 5 members
-        if (groupMembers.length < 5) {
-          await db.sadd('available_group_chats', groupChatId)
-        }
-        
-        // Assign colors to each member
-        const colorAssignments = []
-        for (let j = 0; j < groupMembers.length; j++) {
-          const memberId = groupMembers[j]
-          const color = COLORS[j]
-          
-          // Store the color in Redis
-          await db.set(`chat:${groupChatId}:user:${memberId}:color`, color)
-          
-          // Add this chat to the user's group chats
-          await db.sadd(`user:${memberId}:group_chats`, groupChatId)
-          
-          // Set as user's current group chat
-          await db.set(`user:${memberId}:current_group_chat`, groupChatId)
-          
-          // Track the current user's new chat ID
-          if (memberId === session.user.id) {
-            currentUserChatId = groupChatId
-            console.log(`Set current user's new chat to: ${currentUserChatId}`)
-          }
-          
-          colorAssignments.push({
-            userId: memberId,
-            color
-          })
-        }
-        
-        groupChats.push({
-          chatId: groupChatId,
-          members: groupMembers,
-          colorAssignments
-        })
-      }
+
+      groupChats.push({
+        chatId: groupChatId,
+        members: groupMembers,
+        colorAssignments
+      })
     }
 
     // Verify that all users have been properly assigned before returning
@@ -298,19 +277,31 @@ export async function POST(req: Request) {
       }))
     }))
 
-    // Return the response
-    return new Response(JSON.stringify({
-      success: true,
-      message: `Created ${groupChats.length} group chats`,
-      groupChats,
-      currentUserChatId,
+    // Now that all data is written, notify clients that the rebuild is complete.
+    await pusherServer.trigger('global_notifications', 'group_chat_update', {
+      eventType: 'rebuild',
+      timestamp: Date.now(),
+      message: 'Group chats have been transitioned to new sets',
+      initiatedBy: adminUser,
       transitionDate: transitionDate || null,
-      allUsersVerified
-    }), {
-      headers: {
-        'Content-Type': 'application/json'
-      }
     })
+
+    // Return the response
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: `Created ${groupChats.length} group chats`,
+        groupChats,
+        currentUserChatId,
+        transitionDate: transitionDate || null,
+        allUsersVerified,
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
   } catch (error) {
     console.error('Error transitioning group chats:', error)
     return new Response('Server error', { status: 500 })

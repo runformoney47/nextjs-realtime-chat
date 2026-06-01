@@ -9,7 +9,16 @@ import { getServerSession } from 'next-auth'
 
 export async function POST(req: Request) {
   try {
-    const { text, chatId }: { text: string; chatId: string } = await req.json()
+    // Avoid relying on req.json()/req.text() to sidestep Undici body issues:
+    // accept chatId and text as query parameters instead.
+    const url = new URL(req.url)
+    const chatId = url.searchParams.get('chatId') ?? ''
+    const text = url.searchParams.get('text') ?? ''
+
+    if (!text || !chatId) {
+      return new Response('Invalid request payload', { status: 400 })
+    }
+
     const session = await getServerSession(authOptions)
 
     if (!session) return new Response('Unauthorized', { status: 401 })
@@ -37,25 +46,21 @@ export async function POST(req: Request) {
       const message = messageValidator.parse(messageData)
       const channelName = toPusherKey(`chat:${chatId}`)
 
-      console.log(`Triggering Pusher event 'incoming-message' on channel ${channelName}`)
-      
-      // Notify all group members
-      await pusherServer.trigger(
-        channelName,
-        'incoming-message',
-        message
-      ).catch(error => {
-        console.error('Pusher trigger error:', error)
-        throw new Error('Failed to send message via Pusher')
-      })
-
-      console.log('Message sent successfully via Pusher')
-
-      // Store the message
+      // Persist first so real-time delivery never loses history.
       await db.zadd(`chat:${chatId}:messages`, {
         score: timestamp,
         member: JSON.stringify(message),
       })
+
+      console.log(`Triggering Pusher event 'incoming-message' on channel ${channelName}`)
+      
+      // Notify all group members
+      await pusherServer
+        .trigger(channelName, 'incoming-message', message)
+        .catch((error) => {
+          console.error('Pusher trigger error:', error)
+          throw new Error('Failed to send message via Pusher')
+        })
 
       return new Response('OK')
     } else {
@@ -95,6 +100,12 @@ export async function POST(req: Request) {
 
       const message = messageValidator.parse(messageData)
 
+      // Persist first so real-time delivery never loses history.
+      await db.zadd(`chat:${chatId}:messages`, {
+        score: timestamp,
+        member: JSON.stringify(message),
+      })
+
       // Notify all connected chat room clients
       await pusherServer.trigger(
         toPusherKey(`chat:${chatId}`),
@@ -111,12 +122,6 @@ export async function POST(req: Request) {
           senderName: sender.name
         }
       )
-
-      // Store the message
-      await db.zadd(`chat:${chatId}:messages`, {
-        score: timestamp,
-        member: JSON.stringify(message),
-      })
 
       return new Response('OK')
     }

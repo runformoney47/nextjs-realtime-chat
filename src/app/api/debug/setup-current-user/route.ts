@@ -3,6 +3,7 @@ import { isAdmin } from '@/lib/admin'
 import { db } from '@/lib/db'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
+import { saveAppUser } from '@/lib/user-store'
 
 export async function POST() {
   try {
@@ -22,15 +23,28 @@ export async function POST() {
       id: session.user.id,
       name: session.user.name || 'Admin User',
       email: session.user.email || 'admin@example.com',
-      image: session.user.image || 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin',
+      // Prefer PNG avatar to avoid Next.js SVG image warnings.
+      image: session.user.image || 'https://api.dicebear.com/7.x/avataaars/png?seed=admin',
       createdAt: new Date().toISOString(),
       lastActive: new Date().toISOString(),
       isOnline: true,
       isAdmin: true
     }
 
-    // Store the user record
-    await db.set(`user:${session.user.id}`, JSON.stringify(userRecord))
+    // Store the user record and register it in the canonical user index
+    await saveAppUser(
+      {
+        id: userRecord.id,
+        name: userRecord.name,
+        email: userRecord.email,
+        image: userRecord.image,
+        createdAt: userRecord.createdAt,
+        lastActive: userRecord.lastActive,
+        isOnline: userRecord.isOnline,
+        isSimUser: false,
+      },
+      { source: 'debug-setup-current-user' },
+    )
 
     // Add some additional test users
     const testUsers = [
@@ -38,7 +52,7 @@ export async function POST() {
         id: 'test-user-1',
         name: 'Test User 1',
         email: 'test1@example.com',
-        image: 'https://api.dicebear.com/7.x/avataaars/svg?seed=1',
+        image: 'https://api.dicebear.com/7.x/avataaars/png?seed=1',
         createdAt: new Date().toISOString(),
         lastActive: new Date().toISOString(),
         isOnline: true
@@ -47,7 +61,7 @@ export async function POST() {
         id: 'test-user-2',
         name: 'Test User 2',
         email: 'test2@example.com',
-        image: 'https://api.dicebear.com/7.x/avataaars/svg?seed=2',
+        image: 'https://api.dicebear.com/7.x/avataaars/png?seed=2',
         createdAt: new Date(Date.now() - 86400000).toISOString(), // 1 day ago
         lastActive: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
         isOnline: false
@@ -56,16 +70,28 @@ export async function POST() {
         id: 'test-user-3',
         name: 'Test User 3',
         email: 'test3@example.com',
-        image: 'https://api.dicebear.com/7.x/avataaars/svg?seed=3',
+        image: 'https://api.dicebear.com/7.x/avataaars/png?seed=3',
         createdAt: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
         lastActive: new Date().toISOString(),
         isOnline: true
       }
     ]
 
-    // Store test users
+    // Store test users and register them in the canonical user index
     for (const user of testUsers) {
-      await db.set(`user:${user.id}`, JSON.stringify(user))
+      await saveAppUser(
+        {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          createdAt: user.createdAt,
+          lastActive: user.lastActive,
+          isOnline: user.isOnline,
+          isSimUser: true,
+        },
+        { source: 'debug-setup-current-user' },
+      )
     }
 
     // Add some test groups

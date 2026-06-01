@@ -16,7 +16,7 @@ export async function POST() {
         id: 'test-user-1',
         name: 'Test User 1',
         email: 'test1@example.com',
-        image: 'https://api.dicebear.com/7.x/avataaars/svg?seed=1',
+        image: 'https://api.dicebear.com/7.x/avataaars/png?seed=1',
         createdAt: new Date().toISOString(),
         lastActive: new Date().toISOString(),
         isOnline: true
@@ -25,7 +25,7 @@ export async function POST() {
         id: 'test-user-2',
         name: 'Test User 2',
         email: 'test2@example.com',
-        image: 'https://api.dicebear.com/7.x/avataaars/svg?seed=2',
+        image: 'https://api.dicebear.com/7.x/avataaars/png?seed=2',
         createdAt: new Date().toISOString(),
         lastActive: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
         isOnline: false
@@ -34,7 +34,7 @@ export async function POST() {
         id: 'test-user-3',
         name: 'Test User 3',
         email: 'test3@example.com',
-        image: 'https://api.dicebear.com/7.x/avataaars/svg?seed=3',
+        image: 'https://api.dicebear.com/7.x/avataaars/png?seed=3',
         createdAt: new Date().toISOString(),
         lastActive: new Date().toISOString(),
         isOnline: true

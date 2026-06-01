@@ -1,12 +1,72 @@
 'use client'
+// This file is the /login page (App Router) and is a CLIENT component because:
+// - It uses hooks (state, effects, router).
+// - It calls the NextAuth client `signIn` helper.
+// It renders two flows:
+//   1) Google OAuth (NextAuth Google provider).
+//   2) A "Temporary Account Simulator" using the custom NextAuth credentials provider "sim-user".
+// The sim-user flow logs events (for debugging), persists them to sessionStorage, and mirrors to a debug
+// endpoint in development. After successful sign-in, it redirects to /dashboard.
 
 import Button from '@/components/ui/Button'
-import { FC, useMemo, useState } from 'react'
-import { signIn } from 'next-auth/react'
-import { toast } from 'react-hot-toast'
-import { useRouter } from 'next/navigation'
 import clsx from 'clsx'
+import { signIn } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
+import { FC, useCallback, useEffect, useMemo, useState } from 'react'
+import { toast } from 'react-hot-toast'
 
+type SimLogLevel = 'info' | 'warn' | 'error' | 'debug'
+
+// Key for sessionStorage where we keep a short rolling log of sim-user events
+const SIM_LOG_STORAGE_KEY = 'simUserLogs'
+
+/**
+ * On mount, replay any sim-user logs from a previous attempt
+ * so you can see the trail in the console if the page was reloaded.
+ */
+function replayStoredLogs() {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(SIM_LOG_STORAGE_KEY)
+    if (!raw) return
+
+    const entries = JSON.parse(raw) as SimLogEntry[]
+    if (!Array.isArray(entries) || entries.length === 0) {
+      return
+    }
+
+    console.groupCollapsed(
+      `[SimUser] Restored ${entries.length} event(s) from previous attempt`
+    )
+    entries.forEach(({ timestamp, level, message, payload }) => {
+      const method =
+        level === 'error'
+          ? 'error'
+          : level === 'warn'
+          ? 'warn'
+          : level === 'debug'
+          ? 'debug'
+          : 'info'
+
+      console[method](`${timestamp} – ${message}`, payload ?? '')
+    })
+    console.groupEnd()
+  } catch (error) {
+    console.error('[SimUser] Unable to replay stored logs', error)
+  }
+}
+
+type SimLogEntry = {
+  timestamp: string
+  level: SimLogLevel
+  message: string
+  payload?: unknown
+}
+
+// Main login page component
 const Page: FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [isSimLoading, setIsSimLoading] = useState<boolean>(false)
@@ -16,11 +76,13 @@ const Page: FC = () => {
   const [username, setUsername] = useState<string>('')
   const router = useRouter()
 
+  // Disable buttons whenever a login flow is in progress
   const loginDisabled = useMemo(
     () => isLoading || isSimLoading,
     [isLoading, isSimLoading]
   )
 
+  // Google OAuth flow via NextAuth
   async function loginWithGoogle() {
     setIsLoading(true)
     try {
@@ -33,55 +95,209 @@ const Page: FC = () => {
     }
   }
 
+  // On mount, replay any stored sim-user logs from previous attempts
+  useEffect(() => {
+    replayStoredLogs()
+  }, [])
+
+  // Helper to log sim-user events (console + sessionStorage + optional server mirror)
+  const logSimEvent = useCallback(
+    (level: SimLogLevel, message: string, payload?: unknown) => {
+      const entry: SimLogEntry = {
+        timestamp: new Date().toISOString(),
+        level,
+        message,
+        payload,
+      }
+
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        try {
+          const raw = window.sessionStorage.getItem(SIM_LOG_STORAGE_KEY)
+          const entries = raw ? (JSON.parse(raw) as SimLogEntry[]) : []
+          const nextEntries = [...entries.slice(-199), entry]
+          window.sessionStorage.setItem(
+            SIM_LOG_STORAGE_KEY,
+            JSON.stringify(nextEntries)
+          )
+        } catch (error) {
+          console.warn('[SimUser] Failed to persist log entry', error, entry)
+        }
+      }
+
+      const method =
+        level === 'error'
+          ? 'error'
+          : level === 'warn'
+          ? 'warn'
+          : level === 'debug'
+          ? 'debug'
+          : 'info'
+
+      if (payload !== undefined) {
+        console[method](`[SimUser] ${message}`, payload)
+      } else {
+        console[method](`[SimUser] ${message}`)
+      }
+
+      // Also mirror logs to the server terminal via a debug API in development.
+      if (process.env.NODE_ENV === 'development') {
+        try {
+          void fetch('/api/debug/client-log', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              level:
+                level === 'debug'
+                  ? 'debug'
+                  : level === 'error'
+                  ? 'error'
+                  : level === 'warn'
+                  ? 'warn'
+                  : 'info',
+              message,
+              payload,
+            }),
+          })
+        } catch (error) {
+          // Swallow network errors – logging should never break the UI.
+          console.warn('[SimUser] Failed to POST log to /api/debug/client-log', error)
+        }
+      }
+    },
+    []
+  )
+
+  // Track which temp-user mode is selected
+  const handleSelectMode = (mode: 'new' | 'existing') => {
+    const snapshot = {
+      timestamp: new Date().toISOString(),
+      previousMode: selectedMode,
+      requestedMode: mode,
+      isLoading,
+      isSimLoading,
+      loginDisabled,
+    }
+
+    logSimEvent(
+      'info',
+      mode === 'new'
+        ? 'User selected the CREATE temp account mode.'
+        : 'User selected the SIGN IN temp account mode.',
+      snapshot
+    )
+
+    setSelectedMode(mode)
+  }
+
+  // Main handler for the temp account flow (sim-user credentials provider)
   async function loginWithSimulationUser() {
     setIsSimLoading(true)
+    const interactionId =
+      typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : Math.random().toString(36).slice(2)
+
+    const startContext = {
+      interactionId,
+      timestamp: new Date().toISOString(),
+      selectedMode,
+      rawUsername: username,
+      isLoading,
+      isSimLoading,
+      loginDisabled,
+    }
+
+    logSimEvent(
+      'info',
+      `Temp account flow started (interaction ${interactionId}).`,
+      startContext
+    )
+
     try {
       if (!selectedMode) {
+        logSimEvent('warn', 'Validation failed: no mode selected.', {
+          interactionId,
+        })
         toast.error('Please choose to create or sign in to a temp account.')
         return
       }
 
       if (!username.trim()) {
+        logSimEvent('warn', 'Validation failed: username missing.', {
+          interactionId,
+          username,
+        })
         toast.error('Please enter a username to continue.')
         return
       }
 
-      const baseUrl =
-        typeof window !== 'undefined'
-          ? window.location.origin
-          : process.env.NEXTAUTH_URL || 'http://localhost:3000'
-
-      const randomSeed =
-        typeof crypto !== 'undefined' && crypto.randomUUID
-          ? crypto.randomUUID()
-          : Math.random().toString(36).slice(2)
-
-      const email = `sim-${randomSeed}@example.com`
       const normalizedUsername = username.trim()
+      const context = {
+        interactionId,
+        normalizedUsername,
+        selectedMode,
+        envNextAuthUrl: process.env.NEXTAUTH_URL,
+      }
+
+      logSimEvent(
+        'info',
+        'Validation complete. Calling NextAuth sim-user provider.',
+        context
+      )
 
       const result = await signIn('sim-user', {
-        name: normalizedUsername,
+        username: normalizedUsername,
         mode: selectedMode,
         redirect: false,
-        callbackUrl: `${baseUrl}/dashboard`,
       })
 
-      console.log('[SimUser][signIn][result]', result)
+      logSimEvent('info', 'NextAuth signIn responded for sim-user.', {
+        interactionId,
+        result,
+      })
 
-      if (result?.error) {
-        toast.error(
-          `Failed to sign in as a simulation user: ${result.error}`
-        )
+      if (result?.error || result?.ok === false) {
+        const error = result?.error ?? 'Unknown'
+
+        logSimEvent('error', 'sim-user signIn reported an error.', {
+          interactionId,
+          error,
+          url: result?.url,
+        })
+
+        if (error === 'CredentialsSignin' && selectedMode === 'existing') {
+          toast.error(
+            `No temp account with username "${normalizedUsername}" exists yet. Try "Create temp account" first.`
+          )
+        } else {
+          toast.error(
+            `Failed to sign in as a temp user: ${error}`
+          )
+        }
+
         return
       }
 
-      const url = result?.url ?? '/dashboard'
+      const url = '/dashboard'
+      logSimEvent('info', 'Redirecting user after successful temp login.', {
+        interactionId,
+        url,
+      })
       router.push(url)
     } catch (error) {
-      console.error('[SimUser][loginWithSimulationUser] Failed to sign in', error)
+      logSimEvent('error', 'Unexpected failure in temp account flow.', {
+        interactionId,
+        error,
+      })
       toast.error('Something went wrong while creating a simulation user.')
     } finally {
       setIsSimLoading(false)
+      logSimEvent('info', 'Temp account flow finished.', {
+        interactionId,
+        endedAt: new Date().toISOString(),
+      })
     }
   }
 
@@ -149,7 +365,7 @@ const Page: FC = () => {
                       ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
                       : 'border-gray-200 text-gray-600 hover:border-indigo-300'
                   )}
-                  onClick={() => setSelectedMode('new')}
+                  onClick={() => handleSelectMode('new')}
                   disabled={loginDisabled}>
                   Create temp account
                 </button>
@@ -161,7 +377,7 @@ const Page: FC = () => {
                       ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
                       : 'border-gray-200 text-gray-600 hover:border-indigo-300'
                   )}
-                  onClick={() => setSelectedMode('existing')}
+                  onClick={() => handleSelectMode('existing')}
                   disabled={loginDisabled}>
                   Sign into temp account
                 </button>

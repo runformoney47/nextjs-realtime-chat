@@ -4,6 +4,8 @@ import { db } from '@/lib/db'
 import { nanoid } from 'nanoid'
 import { getServerSession } from 'next-auth'
 import { pusherServer } from '@/lib/pusher'
+import { getAllAppUserIds } from '@/lib/user-store'
+import { addGroupChatId, getAllGroupChatIds, buildRandomGroups } from '@/lib/group-chats'
 
 // The list of colors for anonymous identities
 const COLORS = ['Green', 'Yellow', 'Orange', 'Red', 'Violet']
@@ -18,31 +20,27 @@ export async function POST(req: Request) {
     console.log('Starting group chat rebuild...')
 
     // Notify all connected clients that group chats are being rebuilt
-    await pusherServer.trigger('global_notifications', 'group_chat_update', {
-      eventType: 'rebuild',
+    await pusherServer.trigger('global_notifications', 'group_chat_transition_started', {
       timestamp: Date.now(),
-      message: 'Group chats are being rebuilt'
+      message: 'Group chats are being rebuilt',
     })
 
-    // Step 1: Get all users
-    const rawUsers = await fetchRedis('keys', 'user:*') as string[]
-    const userIds = rawUsers
-      .filter(key => !key.includes(':') || key.split(':').length === 2) // Only get direct user keys
-      .map(key => key.split(':')[1]) // Extract user IDs
-    
-    console.log(`Found ${userIds.length} users: ${userIds.join(', ')}`)
+    // Step 1: Get all users from the canonical index
+    const indexedUserIds = await getAllAppUserIds()
+
+    console.log(
+      `[GroupChatRebuild] Indexed user ids (${indexedUserIds.length}):`,
+      indexedUserIds.join(', '),
+    )
 
     // Archive existing group chats instead of deleting them
-    // Get all existing group chats
-    const existingGroupChatKeys = await fetchRedis('keys', 'chat:group_*') as string[]
+    // Discover existing group chats via the canonical index
+    const existingGroupChatIds = await getAllGroupChatIds()
     const existingGroupChats = []
     
-    for (const key of existingGroupChatKeys) {
-      const chatId = key.split(':')[1] // Extract chat ID from key
-      
-      // Skip group chat color keys and other related keys
-      if (chatId.includes(':')) continue
-      
+    for (const chatId of existingGroupChatIds) {
+      const key = `chat:${chatId}`
+
       try {
         const chatData = await fetchRedis('get', key) as string
         existingGroupChats.push({
@@ -79,6 +77,28 @@ export async function POST(req: Request) {
       console.log('No previous chat found for current user')
     }
 
+    // Build a superset of all users that have ever been in a group chat
+    // plus those in the canonical index, so no participant is left behind
+    // just because they weren't added to users:all yet.
+    const usersFromChats = new Set<string>()
+    for (const chat of existingGroupChats) {
+      if (Array.isArray(chat.data?.members)) {
+        for (const memberId of chat.data.members) {
+          usersFromChats.add(memberId)
+        }
+      }
+    }
+
+    // Avoid downlevel Set iteration issues in TS builds by explicitly arrayifying inputs.
+    const userIds = Array.from(
+      new Set([...Array.from(indexedUserIds), ...Array.from(usersFromChats)]),
+    )
+
+    console.log(
+      `[GroupChatRebuild] All users to (re)assign (${userIds.length}):`,
+      userIds.join(', '),
+    )
+
     // Clear the available group chats set
     await db.del('available_group_chats')
     
@@ -90,19 +110,15 @@ export async function POST(req: Request) {
       await db.del(`user:${userId}:group_chats`)
     }
 
-    // Step 3: Create new group chats
+    // Step 3: Create new group chats using the shared random grouping algorithm.
     const groupChats = []
     let currentUserChatId = null
-    
-    // In a future version, this is where we would use the Python algorithm's results
-    // For now, we'll continue with the simple approach of splitting users into groups of 5
-    
-    // Shuffle the user IDs to create new random groups
-    const shuffledUserIds = [...userIds].sort(() => Math.random() - 0.5)
-    
-    // Split users into groups of 5
-    for (let i = 0; i < shuffledUserIds.length; i += 5) {
-      const groupMembers = shuffledUserIds.slice(i, i + 5)
+
+    const randomGroups = buildRandomGroups(userIds, 5)
+
+    for (const groupMembers of randomGroups) {
+      if (groupMembers.length === 0) continue
+
       const groupChatId = 'group_' + nanoid()
       
       const groupChat = {
@@ -113,8 +129,11 @@ export async function POST(req: Request) {
         createdAt: Date.now()
       }
       
-      // Save group chat to Redis
-      await db.set(`chat:${groupChatId}`, JSON.stringify(groupChat))
+      // Save group chat to Redis and track it in the index
+      await Promise.all([
+        db.set(`chat:${groupChatId}`, JSON.stringify(groupChat)),
+        addGroupChatId(groupChatId),
+      ])
       
       // Mark this chat as available if it has fewer than 5 members
       if (groupMembers.length < 5) {
@@ -155,17 +174,27 @@ export async function POST(req: Request) {
       })
     }
 
-    return new Response(JSON.stringify({
-      success: true,
-      message: `Created ${groupChats.length} group chats`,
-      groupChats,
-      currentUserChatId, // Return the current user's new chat ID
-      previousChatId: currentUserPreviousChat // Return the previous chat ID for reference
-    }), {
-      headers: {
-        'Content-Type': 'application/json'
-      }
+    // Now that all data is written, notify clients that the rebuild is complete.
+    await pusherServer.trigger('global_notifications', 'group_chat_update', {
+      eventType: 'rebuild',
+      timestamp: Date.now(),
+      message: 'Group chats have been rebuilt',
     })
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: `Created ${groupChats.length} group chats`,
+        groupChats,
+        currentUserChatId, // Return the current user's new chat ID
+        previousChatId: currentUserPreviousChat, // Return the previous chat ID for reference
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
   } catch (error) {
     console.error('Error rebuilding group chats:', error)
     return new Response('Server error', { status: 500 })

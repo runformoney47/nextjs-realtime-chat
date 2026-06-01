@@ -17,13 +17,25 @@ export async function POST(req: Request) {
       return new Response('Unauthorized - Admin access required', { status: 403 })
     }
 
-    // Parse request body
-    const body = await req.json()
-    const { type, message } = body
-
-    if (!type) {
-      return new Response('Missing notification type', { status: 400 })
+    // Parse request body defensively – logging/notifications should never crash
+    let type: string | undefined
+    let message: string | undefined
+    try {
+      if (req.headers.get('content-type')?.includes('application/json')) {
+        // Clone the request before reading the body to avoid Undici #state issues
+        const clone = req.clone()
+        const body = (await clone.json()) as { type?: string; message?: string }
+        type = body.type
+        message = body.message
+      }
+    } catch {
+      // Treat bad/empty JSON as "no extra data"
+      type = undefined
+      message = undefined
     }
+
+    // If type is missing, just no-op with 204 – this is a dev convenience endpoint.
+    if (!type) return new Response(null, { status: 204 })
 
     // Send the notification via Pusher
     await pusherServer.trigger('global_notifications', type, {
@@ -35,16 +47,20 @@ export async function POST(req: Request) {
       }
     })
 
-    return new Response(JSON.stringify({
-      success: true,
-      message: 'Notification sent successfully'
-    }), {
-      headers: {
-        'Content-Type': 'application/json'
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: 'Notification sent successfully',
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
       }
-    })
+    )
   } catch (error) {
     console.error('Error sending global notification:', error)
-    return new Response('Server error', { status: 500 })
+    // Don’t propagate notification failures to the UI; just log them.
+    return new Response(null, { status: 204 })
   }
 } 

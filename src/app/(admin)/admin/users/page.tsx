@@ -50,7 +50,8 @@ async function getUsers(): Promise<User[]> {
             id: user.id,
             name: user.name || 'Unknown User',
             email: user.email || 'No email',
-            image: user.image || user.picture || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default',
+            // Prefer PNG avatar to avoid Next.js SVG image warnings.
+            image: user.image || user.picture || 'https://api.dicebear.com/7.x/avataaars/png?seed=default',
             createdAt: user.createdAt || user.created_at || new Date().toISOString(),
             lastActive: user.lastActive || user.last_active,
             isOnline: user.isOnline || false
