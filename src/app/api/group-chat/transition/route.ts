@@ -32,6 +32,8 @@ export async function POST(req: Request) {
     // Parse the request body for any transition parameters, but never fail if it’s malformed.
     let transitionDate: string | null = null
     let algorithmOutput: unknown = null
+    let mode: 'random' | 'schedule' | null = null
+    let scheduleDayIndex: number | null = null
     try {
       if (req.headers.get('content-type')?.includes('application/json')) {
         // Clone the request before reading the body to avoid Undici #state issues
@@ -39,14 +41,23 @@ export async function POST(req: Request) {
         const body = (await clone.json()) as {
           transitionDate?: string | null
           algorithmOutput?: unknown
+          mode?: 'random' | 'schedule'
+          scheduleDayIndex?: number | null
         }
         transitionDate = body.transitionDate ?? null
         algorithmOutput = body.algorithmOutput ?? null
+        mode = body.mode ?? null
+        scheduleDayIndex =
+          typeof body.scheduleDayIndex === 'number' && Number.isFinite(body.scheduleDayIndex)
+            ? body.scheduleDayIndex
+            : null
       }
     } catch {
       // Treat any parse error as "no transition params provided"
       transitionDate = null
       algorithmOutput = null
+      mode = null
+      scheduleDayIndex = null
     }
 
     // Notify all connected clients that group chats are being transitioned
@@ -142,15 +153,56 @@ export async function POST(req: Request) {
       await db.del(`user:${userId}:group_chats`)
     }
 
-    // Create new group chats using a simple random grouping algorithm:
-    // take all users, randomly partition into groups of up to 5. Any
-    // remainder forms a smaller final group.
+    // Create new group chats.
+    // If a master schedule is configured and mode === 'schedule', we use the
+    // groups from schedule[dayIndex]. Otherwise we fall back to random groups.
     const groupChats = []
     let currentUserChatId = null
 
-    const randomGroups = buildRandomGroups(userIds, 5)
+    let groups: string[][]
 
-    for (const groupMembers of randomGroups) {
+    if (mode === 'schedule') {
+      const rawSchedule = await db.get('schedule:master')
+      if (!rawSchedule) {
+        return new Response('No master schedule configured', { status: 400 })
+      }
+
+      let schedule: unknown
+      if (typeof rawSchedule === 'string') {
+        schedule = JSON.parse(rawSchedule)
+      } else {
+        schedule = rawSchedule
+      }
+
+      if (!Array.isArray(schedule)) {
+        return new Response('Invalid master schedule format', { status: 500 })
+      }
+
+      if (
+        scheduleDayIndex === null ||
+        scheduleDayIndex < 0 ||
+        scheduleDayIndex >= (schedule as unknown[]).length
+      ) {
+        return new Response('Invalid schedule day index', { status: 400 })
+      }
+
+      const day = (schedule as unknown[])[scheduleDayIndex]
+      if (!Array.isArray(day)) {
+        return new Response('Invalid schedule day format', { status: 500 })
+      }
+
+      groups = day as string[][]
+      console.log(
+        `[GroupChatTransition] Using schedule mode, day ${scheduleDayIndex} with ${groups.length} groups`,
+      )
+    } else {
+      groups = buildRandomGroups(userIds, 5)
+      console.log(
+        `[GroupChatTransition] Using random mode with ${groups.length} groups (groupSize=5)`,
+      )
+    }
+
+    for (const groupMembers of groups) {
       if (groupMembers.length === 0) continue
 
       const groupChatId = 'group_' + nanoid()

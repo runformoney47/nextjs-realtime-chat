@@ -80,8 +80,8 @@ const ChatWrapper: FC<ChatWrapperProps> = ({
   }, [isGroupChat, chatId, sessionId]) // Removed router and isCheckingCurrent dependencies
 
   return (
-    <div className='flex-1 justify-between flex flex-col h-screen'>
-      <div className='flex sm:items-center justify-between py-3 border-b-2 border-gray-200'>
+    <div className='flex-1 justify-between flex flex-col h-full'>
+      <div className='flex sm:items-center justify-between py-3 px-4 border-b-2 border-gray-200'>
         <div className='relative flex items-center space-x-4'>
           {/* Only show the image for direct chats, not group chats */}
           {!isGroupChat && (
@@ -136,7 +136,7 @@ const ChatWrapper: FC<ChatWrapperProps> = ({
         isGroupChat={isGroupChat}
         userColors={userColors}
       />
-      <ChatInput chatId={chatId} />
+      <ChatInput chatId={chatId} sessionId={sessionId} />
 
       {/* User Ranking Sidebar */}
       {isGroupChat && (

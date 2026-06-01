@@ -1,12 +1,14 @@
 'use client'
 
 import Button from '@/components/ui/Button'
-import { FC, useState } from 'react'
+import { FC, useEffect, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { useRouter } from 'next/navigation'
 import { Loader2 } from 'lucide-react'
 
 interface PageProps {}
+
+type Schedule = string[][][]
 
 const RebuildGroupChatsPage: FC<PageProps> = ({}) => {
   const [isLoading, setIsLoading] = useState<boolean>(false)
@@ -14,7 +16,126 @@ const RebuildGroupChatsPage: FC<PageProps> = ({}) => {
   const [result, setResult] = useState<any>(null)
   const [transitionDate, setTransitionDate] = useState<string>('')
   const [transitionStep, setTransitionStep] = useState<string>('')
+  const [isImportOpen, setIsImportOpen] = useState<boolean>(false)
+  const [importedText, setImportedText] = useState<string>('')
+  const [importedSchedule, setImportedSchedule] = useState<Schedule | null>(null)
+  const [isSavingSchedule, setIsSavingSchedule] = useState<boolean>(false)
+  const [currentSchedule, setCurrentSchedule] = useState<Schedule | null>(null)
+  const [isGeneratingSchedule, setIsGeneratingSchedule] = useState<boolean>(false)
+  const [selectedScheduleDay, setSelectedScheduleDay] = useState<number | null>(null)
   const router = useRouter()
+
+  useEffect(() => {
+    const fetchSchedule = async () => {
+      try {
+        const res = await fetch('/api/schedule')
+        if (!res.ok) return
+        const data = (await res.json()) as { schedule: Schedule | null }
+        setCurrentSchedule(data.schedule)
+      } catch (error) {
+        console.error('Failed to load current schedule', error)
+      }
+    }
+
+    fetchSchedule()
+  }, [])
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      setImportedText(text)
+
+      const parsed = JSON.parse(text) as unknown
+
+      // Basic runtime validation for string[][][]
+      if (
+        !Array.isArray(parsed) ||
+        !parsed.every(
+          (day) =>
+            Array.isArray(day) &&
+            day.every(
+              (group) => Array.isArray(group) && group.every((user) => typeof user === 'string'),
+            ),
+        )
+      ) {
+        toast.error('Invalid schedule format. Expected a 3-level array of userId strings.')
+        setImportedSchedule(null)
+        return
+      }
+
+      setImportedSchedule(parsed as Schedule)
+      toast.success('Schedule file parsed successfully.')
+    } catch (error) {
+      console.error('Error reading schedule file:', error)
+      toast.error('Failed to read or parse the schedule file.')
+      setImportedSchedule(null)
+    }
+  }
+
+  const handleSaveSchedule = async () => {
+    if (!importedSchedule) {
+      toast.error('No valid schedule to save.')
+      return
+    }
+
+    setIsSavingSchedule(true)
+    try {
+      const res = await fetch('/api/schedule', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ schedule: importedSchedule }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Failed to save schedule')
+      }
+
+      setCurrentSchedule(importedSchedule)
+      toast.success('Master schedule imported successfully.')
+      setIsImportOpen(false)
+    } catch (error) {
+      console.error('Error saving schedule:', error)
+      toast.error('Failed to save schedule.')
+    } finally {
+      setIsSavingSchedule(false)
+    }
+  }
+
+  const handleGenerateSchedule = async () => {
+    if (isGeneratingSchedule || isLoading) return
+    setIsGeneratingSchedule(true)
+    try {
+      const res = await fetch('/api/schedule', {
+        method: 'PUT',
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to generate schedule')
+      }
+
+      const generated = data.schedule as Schedule
+      setCurrentSchedule(generated)
+      setImportedSchedule(generated)
+      toast.success(
+        `Generated schedule with ${data.meta?.totalUsers ?? 'N'} users over ${
+          data.meta?.days ?? '?'
+        } days.`,
+      )
+    } catch (error) {
+      console.error('Error generating schedule:', error)
+      toast.error('Failed to generate schedule.')
+    } finally {
+      setIsGeneratingSchedule(false)
+    }
+  }
 
   const handleAddRandomUser = async () => {
     if (isAddingUser) return
@@ -90,6 +211,10 @@ const RebuildGroupChatsPage: FC<PageProps> = ({}) => {
         },
         body: JSON.stringify({
           transitionDate: transitionDate ? new Date(transitionDate).getTime() : null,
+          mode:
+            currentSchedule && selectedScheduleDay !== null ? ('schedule' as const) : ('random' as const),
+          scheduleDayIndex:
+            currentSchedule && selectedScheduleDay !== null ? selectedScheduleDay : null,
         }),
       })
 
@@ -184,7 +309,56 @@ const RebuildGroupChatsPage: FC<PageProps> = ({}) => {
           >
             Add user with random name
           </Button>
+          <Button
+            type='button'
+            onClick={handleGenerateSchedule}
+            disabled={isLoading || isGeneratingSchedule}
+            isLoading={isGeneratingSchedule}
+          >
+            Generate whole schedule
+          </Button>
+          <Button
+            type='button'
+            onClick={() => setIsImportOpen(true)}
+            disabled={isLoading}
+          >
+            Import schedule
+          </Button>
         </div>
+
+        {/* Schedule day selector */}
+        {currentSchedule && currentSchedule.length > 0 && (
+          <div className='mb-6'>
+            <label className='block text-sm font-medium text-gray-700 mb-1'>
+              Schedule day index
+            </label>
+            <select
+              className='w-full md:w-64 p-2 border rounded'
+              value={selectedScheduleDay !== null ? String(selectedScheduleDay) : ''}
+              onChange={(e) => {
+                const value = e.target.value
+                if (value === '') {
+                  setSelectedScheduleDay(null)
+                } else {
+                  const idx = Number(value)
+                  setSelectedScheduleDay(Number.isFinite(idx) ? idx : null)
+                }
+              }}
+              disabled={isLoading}
+            >
+              <option value=''>Random (ignore schedule)</option>
+              {currentSchedule.map((_, idx) => (
+                <option key={idx} value={idx}>
+                  {idx}
+                </option>
+              ))}
+            </select>
+            <p className='text-xs text-gray-500 mt-1'>
+              Choose a day index (0 – {currentSchedule.length - 1}). When set, "Advance to Next Group
+              Chat Set" will assign users using that day of the schedule instead of random groups.
+            </p>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="bg-white p-4 rounded-md shadow-sm border border-gray-200 mb-8">
@@ -207,6 +381,73 @@ const RebuildGroupChatsPage: FC<PageProps> = ({}) => {
             type='button'>
             Advance to Next Group Chat Set
           </Button>
+        )}
+
+        {/* Current schedule preview */}
+        {currentSchedule && (
+          <div className='mt-8 bg-white border border-gray-200 rounded-md p-4'>
+            <h2 className='text-lg font-semibold mb-2'>Current master schedule</h2>
+            <p className='text-sm text-gray-600 mb-2'>
+              Only one master schedule is stored at a time. Importing a new schedule will replace
+              the existing one.
+            </p>
+            <pre className='text-xs bg-gray-900 text-gray-100 p-3 rounded overflow-auto max-h-64'>
+              {JSON.stringify(currentSchedule, null, 2)}
+            </pre>
+          </div>
+        )}
+
+        {/* Import schedule modal */}
+        {isImportOpen && (
+          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/40'>
+            <div className='bg-white rounded-lg shadow-lg max-w-2xl w-full p-6'>
+              <h2 className='text-xl font-semibold mb-4'>Import schedule</h2>
+              <p className='text-sm text-gray-600 mb-4'>
+                Upload a text or JSON file containing a 3-level array of user IDs, e.g.
+                <code> string[][][] </code>. This will become the master schedule and will replace
+                any existing schedule.
+              </p>
+
+              <input
+                type='file'
+                accept='.txt,.json'
+                onChange={handleFileChange}
+                className='mb-4'
+              />
+
+              {importedSchedule && (
+                <div className='mb-4'>
+                  <h3 className='font-medium mb-2'>Parsed schedule preview</h3>
+                  <pre className='text-xs bg-gray-900 text-gray-100 p-3 rounded overflow-auto max-h-64'>
+                    {JSON.stringify(importedSchedule, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              <div className='flex justify-end gap-3 mt-4'>
+                <Button
+                  type='button'
+                  variant='ghost'
+                  onClick={() => {
+                    setIsImportOpen(false)
+                    setImportedSchedule(null)
+                    setImportedText('')
+                  }}
+                  disabled={isSavingSchedule}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type='button'
+                  onClick={handleSaveSchedule}
+                  isLoading={isSavingSchedule}
+                  disabled={!importedSchedule || isSavingSchedule}
+                >
+                  Save as master schedule
+                </Button>
+              </div>
+            </div>
+          </div>
         )}
         
         {result && !isLoading && (

@@ -1,5 +1,8 @@
 'use client'
-
+//what is this file?
+//this file is for the providers
+//providers are the components that wrap the app
+//providers are used to provide the app with the necessary context
 import { FC, ReactNode, useEffect } from 'react'
 import { Toaster } from 'react-hot-toast'
 import { pusherClient } from '@/lib/pusher'
