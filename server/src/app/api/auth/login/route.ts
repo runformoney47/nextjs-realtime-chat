@@ -1,17 +1,28 @@
 import { signToken } from '@/lib/jwt'
-import { upsertUser, getUserByEmail } from '@/lib/user-store'
+import {
+  upsertUser,
+  getUserByEmail,
+  getUserByAppleSub,
+  linkAppleSub,
+} from '@/lib/user-store'
+import { verifyAppleIdentityToken } from '@/lib/apple-auth'
 import type { AppUser, LoginResponse, ApiResponse } from '@groupchat/shared'
+
+type AppleFullName = {
+  givenName?: string | null
+  familyName?: string | null
+}
+
+function formatAppleName(fullName?: AppleFullName | null): string {
+  if (!fullName) return ''
+  return [fullName.givenName, fullName.familyName].filter(Boolean).join(' ').trim()
+}
 
 /**
  * POST /api/auth/login
  *
- * Accepts an identity provider token (Apple or Google), verifies it,
- * creates or finds the user, and returns our own JWT.
- *
- * Body: { provider: 'apple' | 'google', identityToken: string }
- *
- * For development/testing, also accepts:
- * Body: { provider: 'dev', email: string, name: string }
+ * Body (Apple): { provider: 'apple', identityToken: string, fullName?: {...}, email?: string }
+ * Body (dev):    { provider: 'dev', email: string, name: string }  — development only
  */
 export async function POST(req: Request) {
   try {
@@ -21,20 +32,30 @@ export async function POST(req: Request) {
     let email: string
     let name: string
     let image = ''
+    let appleSub: string | null = null
 
     if (provider === 'apple') {
-      // TODO: Verify Apple identity token using apple-signin-verify or jose
-      // For now, trust the decoded claims from the client
-      email = body.email
-      name = body.name ?? ''
-      // Apple doesn't provide profile images
-    } else if (provider === 'google') {
-      // TODO: Verify Google identity token via googleapis
-      email = body.email
-      name = body.name ?? ''
-      image = body.image ?? ''
+      const identityToken = body.identityToken as string | undefined
+      if (!identityToken) {
+        return Response.json(
+          { ok: false, error: 'identityToken is required' } satisfies ApiResponse<never>,
+          { status: 400 },
+        )
+      }
+
+      const claims = await verifyAppleIdentityToken(identityToken)
+      if (!claims) {
+        return Response.json(
+          { ok: false, error: 'Invalid Apple identity token' } satisfies ApiResponse<never>,
+          { status: 401 },
+        )
+      }
+
+      appleSub = claims.sub
+      // Prefer verified email from token; client email only as fallback (first sign-in)
+      email = claims.email ?? body.email ?? ''
+      name = formatAppleName(body.fullName) || (body.name ?? '')
     } else if (provider === 'dev' && process.env.NODE_ENV === 'development') {
-      // Dev-only: skip verification for testing
       email = body.email
       name = body.name ?? 'Dev User'
       image = `https://api.dicebear.com/7.x/avataaars/png?seed=${encodeURIComponent(email)}`
@@ -45,48 +66,68 @@ export async function POST(req: Request) {
       )
     }
 
-    if (!email) {
-      return Response.json(
-        { ok: false, error: 'Email is required' } satisfies ApiResponse<never>,
-        { status: 400 },
-      )
+    // ─── Find or create user ───────────────────────────────────────────
+    let user: AppUser | null = null
+
+    if (appleSub) {
+      user = await getUserByAppleSub(appleSub)
     }
 
-    // Find or create user
-    let user = await getUserByEmail(email)
+    if (!user && email) {
+      user = await getUserByEmail(email)
+    }
 
     if (!user) {
+      if (!email && appleSub) {
+        return Response.json(
+          {
+            ok: false,
+            error: 'Apple account not linked. Sign in again with email visible, or contact support.',
+            code: 'APPLE_EMAIL_REQUIRED',
+          } satisfies ApiResponse<never>,
+          { status: 400 },
+        )
+      }
+
+      if (!email) {
+        return Response.json(
+          { ok: false, error: 'Email is required' } satisfies ApiResponse<never>,
+          { status: 400 },
+        )
+      }
+
       const userId = crypto.randomUUID()
       user = await upsertUser({
         id: userId,
-        name,
+        name: name || email.split('@')[0],
         email,
         image,
       })
     } else {
-      // Update last active
       user = await upsertUser({
         ...user,
         name: name || user.name,
+        email: email || user.email,
         image: image || user.image,
         lastActive: new Date().toISOString(),
         isOnline: true,
       })
     }
 
-    // Issue JWT
+    if (appleSub) {
+      await linkAppleSub(user.id, appleSub)
+    }
+
     const token = await signToken({
       sub: user.id,
       email: user.email,
       name: user.name,
     })
 
-    const response: ApiResponse<LoginResponse> = {
+    return Response.json({
       ok: true,
       data: { token, user },
-    }
-
-    return Response.json(response)
+    } satisfies ApiResponse<LoginResponse>)
   } catch (error) {
     console.error('[auth/login] Error:', error)
     return Response.json(
@@ -95,5 +136,3 @@ export async function POST(req: Request) {
     )
   }
 }
-
-

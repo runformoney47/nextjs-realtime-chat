@@ -1,13 +1,20 @@
 import { db } from '@/lib/db'
 import { upsertUser } from '@/lib/user-store'
-import { nanoid } from 'nanoid'
+import { addUsersToCurationPool } from '@/lib/curation'
+import {
+  CHATS_ACTIVE_KEY,
+  CURATION_POOL_KEY,
+  buildGroupChat,
+  saveNewChat,
+} from '@/lib/chat-store'
 import type { ApiResponse, GroupChat } from '@groupchat/shared'
-import { CHAT_COLORS } from '@groupchat/shared'
+import { GROUP_SIZE, pickIcebreakers } from '@groupchat/shared'
 
 /**
  * POST /api/dev/seed
  *
- * DEV ONLY. Creates test users and assigns them to group chats of 5.
+ * DEV ONLY. Creates test users, adds them to the curation pool, and
+ * assigns them to group chats of 5.
  *
  * Body: { userCount?: number, groupSize?: number }
  * Defaults: 20 users, groups of 5 → 4 chats
@@ -23,17 +30,8 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}))
     const userCount = Math.min(body.userCount ?? 20, 100)
-    const groupSize = Math.min(body.groupSize ?? 5, 10)
+    const groupSize = Math.min(body.groupSize ?? GROUP_SIZE, 10)
 
-    const icebreakers = [
-      "What's something you've been obsessed with lately?",
-      "If you could have dinner with anyone, alive or dead, who would it be?",
-      "What's the most underrated thing in your life right now?",
-      "Hot take time — drop your most controversial opinion 🔥",
-      "What's a skill you wish you had but have never tried to learn?",
-    ]
-
-    // ─── Create users ──────────────────────────────────────────────────
     const users = []
     for (let i = 0; i < userCount; i++) {
       const name = `User_${i + 1}`
@@ -49,47 +47,27 @@ export async function POST(req: Request) {
       users.push(user)
     }
 
-    // ─── Shuffle users ─────────────────────────────────────────────────
+    await addUsersToCurationPool(users.map((u) => u.id))
+
     const shuffled = [...users]
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1))
       ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
     }
 
-    // ─── Create group chats ────────────────────────────────────────────
+    const groupCount = Math.floor(shuffled.length / groupSize)
+    const icebreakers = pickIcebreakers(groupCount)
     const chats: GroupChat[] = []
     const now = Date.now()
-    const expiresAt = now + 72 * 60 * 60 * 1000
 
-    for (let g = 0; g < Math.floor(shuffled.length / groupSize); g++) {
+    for (let g = 0; g < groupCount; g++) {
       const members = shuffled.slice(g * groupSize, (g + 1) * groupSize)
-      const chatId = `group_${nanoid()}`
-
-      // Assign colors
-      const memberColors: Record<string, string> = {}
-      members.forEach((user, i) => {
-        memberColors[user.id] = CHAT_COLORS[i % CHAT_COLORS.length]
-      })
-
-      const chat: GroupChat = {
-        id: chatId,
-        members: members.map((u) => u.id),
-        memberColors,
-        createdAt: now,
-        expiresAt,
-        active: true,
-        icebreaker: icebreakers[g % icebreakers.length] ?? null,
-      }
-
-      // Persist chat
-      await db.set(`chat:${chatId}`, JSON.stringify(chat))
-
-      // Each member gets this as their ONE active chat
-      for (const member of members) {
-        await db.set(`user:${member.id}:current_chat`, chatId)
-        await db.sadd(`user:${member.id}:group_chats`, chatId)
-      }
-
+      const chat = buildGroupChat(
+        members.map((u) => u.id),
+        icebreakers[g] ?? null,
+        now,
+      )
+      await saveNewChat(chat)
       chats.push(chat)
     }
 
@@ -103,7 +81,10 @@ export async function POST(req: Request) {
           icebreaker: c.icebreaker,
         })),
       },
-    } satisfies ApiResponse<any>)
+    } satisfies ApiResponse<{
+      users: { id: string; name: string; email: string }[]
+      chats: { id: string; members: string[]; icebreaker: string | null }[]
+    }>)
   } catch (error) {
     console.error('[dev/seed] Error:', error)
     return Response.json(
@@ -136,6 +117,7 @@ export async function DELETE() {
       for (const chatId of chatIds ?? []) {
         await db.del(`chat:${chatId}`)
         await db.del(`chat:${chatId}:messages`)
+        await db.srem(CHATS_ACTIVE_KEY, chatId)
         deleted++
       }
 
@@ -145,7 +127,9 @@ export async function DELETE() {
       await db.del(`user:${userId}:group_chats`)
       await db.del(`user:${userId}:current_chat`)
       await db.del(`user:${userId}:device_tokens`)
+      await db.del(`curation:history:${userId}`)
       await db.srem('users:all', userId)
+      await db.srem(CURATION_POOL_KEY, userId)
       deleted++
     }
 

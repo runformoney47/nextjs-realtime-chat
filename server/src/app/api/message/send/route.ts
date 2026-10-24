@@ -2,6 +2,7 @@ import { authenticate } from '@/lib/auth-guard'
 import { db } from '@/lib/db'
 import { fetchRedis } from '@/helpers/redis'
 import { pusherServer } from '@/lib/pusher'
+import { sendPushToUser } from '@/lib/push'
 import { sendMessageSchema, messageSchema } from '@groupchat/shared'
 import { toPusherKey } from '@groupchat/shared'
 import type { Message, ApiResponse } from '@groupchat/shared'
@@ -78,7 +79,17 @@ export async function POST(req: Request) {
     const channelName = toPusherKey(`chat:${chatId}`)
     await pusherServer.trigger(channelName, 'incoming-message', message)
 
-    // TODO: Trigger push notification for offline members
+    // Notify other members of new message (could be enhanced to only notify offline users)
+    const otherMembers = (chat.members || []).filter((m: string) => m !== auth.sub)
+    await Promise.allSettled(
+      otherMembers.map((memberId: string) =>
+        sendPushToUser(memberId, {
+          title: 'New message',
+          body: 'New message in your group chat',
+          data: { type: 'new_message', chatId },
+        }),
+      ),
+    )
 
     return Response.json({ ok: true, data: message } satisfies ApiResponse<Message>)
   } catch (error) {

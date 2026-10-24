@@ -7,8 +7,8 @@ import {
   SafeAreaView,
   ScrollView,
 } from 'react-native'
-import { router } from 'expo-router'
 import { api } from '@/lib/api'
+import { routeAfterLogin } from '@/lib/post-login'
 import type { OnboardingQuizInput } from '@groupchat/shared'
 
 const INTEREST_OPTIONS = [
@@ -61,7 +61,7 @@ export default function OnboardingScreen() {
 
     const response = await api.post('/profile/quiz', quizData)
     if (response.ok) {
-      router.replace('/(tabs)/chat')
+      await routeAfterLogin()
     }
   }
 

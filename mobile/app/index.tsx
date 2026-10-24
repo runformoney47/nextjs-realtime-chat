@@ -1,34 +1,49 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { View, ActivityIndicator, StyleSheet } from 'react-native'
 import { router } from 'expo-router'
-import { useAuthStore } from '@/stores/authStore'
+import { bootstrapSession } from '@/lib/post-login'
 
 /**
- * Entry point — shows a loading spinner while checking auth state,
- * then redirects to login or the main tabs.
+ * Entry point — validate stored JWT, then route to login / onboarding / chat.
  */
 export default function Index() {
-  const { token, isLoading, loadToken } = useAuthStore()
+  const [bootstrapping, setBootstrapping] = useState(true)
 
   useEffect(() => {
-    loadToken()
+    let cancelled = false
+
+    ;(async () => {
+      const dest = await bootstrapSession()
+      if (cancelled) return
+
+      switch (dest) {
+        case 'login':
+          router.replace('/(auth)/login')
+          break
+        case 'onboarding':
+          router.replace('/(auth)/onboarding')
+          break
+        case 'chat':
+          router.replace('/(tabs)/chat')
+          break
+      }
+      setBootstrapping(false)
+    })()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
-  useEffect(() => {
-    if (isLoading) return
+  if (bootstrapping) {
+    return (
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#4F46E5" />
+      </View>
+    )
+  }
 
-    if (token) {
-      router.replace('/(tabs)/chat')
-    } else {
-      router.replace('/(auth)/login')
-    }
-  }, [token, isLoading])
-
-  return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color="#4F46E5" />
-    </View>
-  )
+  return null
 }
 
 const styles = StyleSheet.create({
@@ -39,5 +54,3 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
 })
-
-

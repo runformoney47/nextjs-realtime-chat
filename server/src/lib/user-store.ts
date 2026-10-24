@@ -50,6 +50,18 @@ export async function getUserByEmail(email: string): Promise<AppUser | null> {
   return getUserById(id)
 }
 
+/** Resolve a user from their Apple `sub` claim (stable across sign-ins). */
+export async function getUserByAppleSub(appleSub: string): Promise<AppUser | null> {
+  const id = (await fetchRedis('get', `user:apple:${appleSub}`)) as string | null
+  if (!id) return null
+  return getUserById(id)
+}
+
+/** Link Apple `sub` → internal user id (call on every Apple login). */
+export async function linkAppleSub(userId: string, appleSub: string): Promise<void> {
+  await db.set(`user:apple:${appleSub}`, userId)
+}
+
 export async function getAllUserIds(): Promise<string[]> {
   return ((await fetchRedis('smembers', USERS_ALL_KEY)) as string[] | null) ?? []
 }

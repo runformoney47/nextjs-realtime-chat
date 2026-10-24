@@ -11,7 +11,7 @@ import {
 import { router } from 'expo-router'
 import { api } from '@/lib/api'
 import type { GroupChat } from '@groupchat/shared'
-import { CHAT_COLOR_HEX } from '@groupchat/shared'
+import { CHAT_COLOR_HEX, formatChatExpiry } from '@groupchat/shared'
 
 export default function HistoryTab() {
   const [pastChats, setPastChats] = useState<GroupChat[]>([])
@@ -23,7 +23,7 @@ export default function HistoryTab() {
 
   const loadPastChats = async () => {
     setLoading(true)
-    const res = await api.get('/chat/list?active=false')
+    const res = await api.get<GroupChat[]>('/chat/list?active=false')
     if (res.ok) {
       setPastChats(res.data)
     }
@@ -68,7 +68,7 @@ export default function HistoryTab() {
             <View style={styles.info}>
               <Text style={styles.title}>{item.members.length} people</Text>
               <Text style={styles.date}>
-                {new Date(item.createdAt).toLocaleDateString()}
+                {formatChatExpiry(item)} · {new Date(item.createdAt).toLocaleDateString()}
               </Text>
             </View>
           </TouchableOpacity>

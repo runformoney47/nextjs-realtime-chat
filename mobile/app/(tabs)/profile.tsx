@@ -47,8 +47,8 @@ export default function ProfileTab() {
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.settingsRow}>
-            <Text style={styles.settingsLabel}>Privacy Policy</Text>
+          <TouchableOpacity style={styles.settingsRow} onPress={() => { router.push('/(auth)/terms' as any) }}>
+            <Text style={styles.settingsLabel}>Terms & Community Guidelines</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
         </View>

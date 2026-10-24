@@ -1,30 +1,27 @@
 import { useEffect, useRef } from 'react'
 import PusherClient from 'pusher-js'
-
-/** Pusher app key — must match the server's NEXT_PUBLIC_PUSHER_APP_KEY */
-const PUSHER_KEY = 'YOUR_PUSHER_KEY' // TODO: Move to env/config
-const PUSHER_CLUSTER = 'us2'
+import { getPusherConfig } from './config'
 
 let pusherInstance: PusherClient | null = null
 
 function getPusher(): PusherClient {
+  const { key, cluster } = getPusherConfig()
+
   if (!pusherInstance) {
-    pusherInstance = new PusherClient(PUSHER_KEY, {
-      cluster: PUSHER_CLUSTER,
+    pusherInstance = new PusherClient(key, {
+      cluster,
+      enabledTransports: ['ws', 'wss'],
     })
   }
+
   return pusherInstance
 }
 
 /**
  * React hook to subscribe to a Pusher channel and bind an event handler.
  *
- * Usage:
- * ```ts
- * usePusher('chat__group_abc123', 'incoming-message', (message) => {
- *   // handle new message
- * })
- * ```
+ * Subscribes when `channelName` is non-null; unsubscribes on unmount or when
+ * the channel changes (e.g. leaving a chat screen).
  */
 export function usePusher<T = unknown>(
   channelName: string | null,
@@ -36,6 +33,12 @@ export function usePusher<T = unknown>(
 
   useEffect(() => {
     if (!channelName) return
+
+    const { key } = getPusherConfig()
+    if (!key) {
+      console.warn('[Pusher] Missing EXPO_PUBLIC_PUSHER_APP_KEY — realtime disabled')
+      return
+    }
 
     const pusher = getPusher()
     const channel = pusher.subscribe(channelName)
@@ -53,14 +56,10 @@ export function usePusher<T = unknown>(
   }, [channelName, eventName])
 }
 
-/**
- * Disconnect Pusher entirely (e.g. on logout).
- */
+/** Disconnect Pusher entirely (e.g. on logout). */
 export function disconnectPusher() {
   if (pusherInstance) {
     pusherInstance.disconnect()
     pusherInstance = null
   }
 }
-
-

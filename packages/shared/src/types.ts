@@ -106,4 +106,15 @@ export interface LoginResponse {
   user: AppUser
 }
 
+// ─── Curation ────────────────────────────────────────────────────────────────
+
+/** Recent groupmate IDs per user, newest cycle first. */
+export type CurationHistoryMap = Record<string, string[][]>
+
+export interface CurationRunResult {
+  chats: GroupChat[]
+  skippedUserIds: string[]
+  expiredChatIds: string[]
+}
+
 

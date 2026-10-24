@@ -5,206 +5,140 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
-  FlatList,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native'
-import { useAuthStore } from '@/stores/authStore'
-import { api } from '@/lib/api'
+import * as AppleAuthentication from 'expo-apple-authentication'
 import { router } from 'expo-router'
-
-type TestUser = { id: string; name: string; email: string }
+import { isAppleSignInAvailable, signInWithApple } from '@/lib/apple-auth'
+import { getApiBase } from '@/lib/api'
 
 export default function LoginScreen() {
-  const { setAuth } = useAuthStore()
-  const [users, setUsers] = useState<TestUser[]>([])
-  const [loading, setLoading] = useState(false)
-  const [seeding, setSeeding] = useState(false)
-  const [loggingIn, setLoggingIn] = useState<string | null>(null)
+  const [appleAvailable, setAppleAvailable] = useState(false)
+  const [signingIn, setSigningIn] = useState(false)
 
   useEffect(() => {
-    loadUsers()
+    isAppleSignInAvailable().then(setAppleAvailable)
   }, [])
 
-  const loadUsers = async () => {
-    setLoading(true)
-    const res = await api.get('/dev/users')
-    if (res.ok) {
-      setUsers(res.data)
-    }
-    setLoading(false)
-  }
+  const handleAppleSignIn = async () => {
+    setSigningIn(true)
+    const result = await signInWithApple()
+    setSigningIn(false)
 
-  const handleSeed = async () => {
-    setSeeding(true)
-    const res = await api.post('/dev/seed', { userCount: 20, groupSize: 5 })
-    if (res.ok) {
-      Alert.alert(
-        'Seeded!',
-        `Created ${res.data.users.length} users and ${res.data.chats.length} group chats`,
-      )
-      await loadUsers()
-    } else {
-      Alert.alert('Error', res.error ?? 'Seed failed')
+    if (!result.ok && result.error !== 'cancelled') {
+      Alert.alert('Sign in failed', result.error)
     }
-    setSeeding(false)
-  }
-
-  const handleReset = async () => {
-    Alert.alert('Reset all test data?', 'This will delete all test users and chats.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Reset',
-        style: 'destructive',
-        onPress: async () => {
-          await api.delete('/dev/seed')
-          setUsers([])
-        },
-      },
-    ])
-  }
-
-  const handleLoginAs = async (userId: string) => {
-    setLoggingIn(userId)
-    const res = await api.post('/dev/login-as', { userId })
-    if (res.ok) {
-      await setAuth(res.data.token, res.data.user)
-      router.replace('/(tabs)/chat')
-    } else {
-      Alert.alert('Error', res.error ?? 'Login failed')
-    }
-    setLoggingIn(null)
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Title */}
-      <View style={styles.titleSection}>
-        <Text style={styles.title}>GroupChat</Text>
-        <Text style={styles.subtitle}>Dev Mode — pick a user to log in as</Text>
+      <View style={styles.hero}>
+        <Text style={styles.emoji}>💬</Text>
+        <Text style={styles.title}>LunchTable</Text>
+        <Text style={styles.tagline}>
+          Curated group chats twice a week.{'\n'}Meet new people, no pressure.
+        </Text>
       </View>
 
-      {/* Action buttons */}
       <View style={styles.actions}>
-        <TouchableOpacity
-          style={styles.seedButton}
-          onPress={handleSeed}
-          disabled={seeding}
-        >
-          {seeding ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <Text style={styles.seedButtonText}>Seed 20 Users + Chats</Text>
-          )}
-        </TouchableOpacity>
+        {signingIn ? (
+          <ActivityIndicator size="large" color="#4F46E5" />
+        ) : appleAvailable ? (
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+            cornerRadius={12}
+            style={styles.appleButton}
+            onPress={() => {
+              void handleAppleSignIn()
+            }}
+          />
+        ) : (
+          <View style={styles.unavailableBox}>
+            <Text style={styles.unavailableTitle}>Apple Sign-In unavailable</Text>
+            <Text style={styles.unavailableText}>
+              Use a physical iPhone with iOS 13+, or open Developer Login below.
+            </Text>
+          </View>
+        )}
 
-        {users.length > 0 && (
-          <TouchableOpacity style={styles.resetButton} onPress={handleReset}>
-            <Text style={styles.resetButtonText}>Reset All</Text>
+        {__DEV__ && (
+          <TouchableOpacity
+            style={styles.devLink}
+            onPress={() => router.push('/(auth)/dev-login')}
+          >
+            <Text style={styles.devLinkText}>Developer login →</Text>
           </TouchableOpacity>
         )}
       </View>
 
-      {/* User list */}
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#4F46E5" />
-        </View>
-      ) : users.length === 0 ? (
-        <View style={styles.center}>
-          <Text style={styles.emptyText}>
-            No test users yet.{'\n'}Tap "Seed" to create some.
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={users}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.userRow}
-              onPress={() => handleLoginAs(item.id)}
-              disabled={loggingIn !== null}
-            >
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {item.name.replace('User_', '')}
-                </Text>
-              </View>
-              <View style={styles.userInfo}>
-                <Text style={styles.userName}>{item.name}</Text>
-                <Text style={styles.userEmail}>{item.email}</Text>
-              </View>
-              {loggingIn === item.id ? (
-                <ActivityIndicator size="small" color="#4F46E5" />
-              ) : (
-                <Text style={styles.chevron}>→</Text>
-              )}
-            </TouchableOpacity>
-          )}
-        />
+      {__DEV__ && (
+        <Text style={styles.apiHint} selectable>
+          API: {getApiBase()}
+        </Text>
       )}
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-
-  titleSection: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 8 },
-  title: { fontSize: 32, fontWeight: '800', color: '#4F46E5' },
-  subtitle: { fontSize: 15, color: '#6B7280', marginTop: 4 },
-
-  actions: {
-    flexDirection: 'row',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    gap: 10,
-  },
-  seedButton: {
+  container: {
     flex: 1,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: '#4F46E5',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'space-between',
+    paddingBottom: 32,
+  },
+  hero: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 32,
   },
-  seedButtonText: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
-  resetButton: {
-    height: 44,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    backgroundColor: '#FEE2E2',
+  emoji: { fontSize: 72, marginBottom: 16 },
+  title: { fontSize: 36, fontWeight: '800', color: '#4F46E5' },
+  tagline: {
+    fontSize: 17,
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 26,
+    marginTop: 12,
+  },
+  actions: {
+    paddingHorizontal: 24,
+    gap: 16,
+    minHeight: 120,
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  resetButtonText: { fontSize: 15, fontWeight: '600', color: '#DC2626' },
-
-  emptyText: { fontSize: 16, color: '#9CA3AF', textAlign: 'center', lineHeight: 24 },
-
-  list: { paddingHorizontal: 16, paddingBottom: 40 },
-  userRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 14,
-    borderRadius: 12,
+  appleButton: {
+    width: '100%',
+    height: 52,
+  },
+  unavailableBox: {
     backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  unavailableTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
     marginBottom: 8,
   },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#4F46E5',
-    justifyContent: 'center',
+  unavailableText: { fontSize: 14, color: '#6B7280', lineHeight: 20 },
+  devLink: {
     alignItems: 'center',
-    marginRight: 12,
+    paddingVertical: 12,
   },
-  avatarText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
-  userInfo: { flex: 1 },
-  userName: { fontSize: 16, fontWeight: '600', color: '#111827' },
-  userEmail: { fontSize: 13, color: '#9CA3AF', marginTop: 2 },
-  chevron: { fontSize: 18, color: '#9CA3AF' },
+  devLinkText: { fontSize: 15, fontWeight: '600', color: '#4F46E5' },
+  apiHint: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    paddingHorizontal: 24,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+  },
 })

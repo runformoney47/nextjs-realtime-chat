@@ -54,4 +54,22 @@ export const deviceTokenSchema = z.object({
 
 export type DeviceTokenInput = z.infer<typeof deviceTokenSchema>
 
+// ─── Reports / Blocks ────────────────────────────────────────────────────────
+
+export const reportSchema = z.object({
+  targetType: z.enum(['message', 'user']),
+  targetId: z.string().min(1),
+  chatId: z.string().optional(),
+  reason: z.string().min(1).max(500),
+  details: z.string().max(1000).optional(),
+})
+
+export type ReportInput = z.infer<typeof reportSchema>
+
+export const blockUserSchema = z.object({
+  userId: z.string().min(1),
+})
+
+export type BlockUserInput = z.infer<typeof blockUserSchema>
+
 

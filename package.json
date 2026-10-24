@@ -9,6 +9,7 @@
   "scripts": {
     "dev:server": "npm run dev --workspace=server",
     "dev:mobile": "npm run start --workspace=mobile",
+    "dev:lan-ip": "node -e \"const os=require('os');for (const n of Object.values(os.networkInterfaces())) for (const i of n||[]) if (i.family==='IPv4'&&!i.internal) console.log(i.address)\"",
     "build:server": "npm run build --workspace=server",
     "build:shared": "npm run build --workspace=@groupchat/shared"
   },

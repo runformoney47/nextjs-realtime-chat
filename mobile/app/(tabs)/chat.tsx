@@ -13,15 +13,22 @@ import {
   Animated,
   Dimensions,
   Pressable,
-  PanResponder,
+  Alert,
 } from 'react-native'
 import { api } from '@/lib/api'
 import { usePusher } from '@/lib/pusher'
 import { useAuthStore } from '@/stores/authStore'
 import type { Message, GroupChat } from '@groupchat/shared'
-import { CHAT_COLOR_HEX, LIGHT_COLORS, toPusherKey } from '@groupchat/shared'
+import {
+  CHAT_COLOR_HEX,
+  LIGHT_COLORS,
+  toPusherKey,
+  isChatWritable,
+  formatChatExpiry,
+} from '@groupchat/shared'
 import type { ChatColor } from '@groupchat/shared'
 import DragToReorder from '@/components/DragToReorder'
+import { ChatBanners } from '@/components/ChatBanners'
 
 const SCREEN_WIDTH = Dimensions.get('window').width
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.82
@@ -48,23 +55,30 @@ export default function ChatTab() {
   const typingDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const wasTypingRef = useRef(false)
 
-  // ─── Load the user's one active chat ─────────────────────────────
-  useEffect(() => {
-    loadCurrentChat()
-  }, [])
-
-  const loadCurrentChat = async () => {
+  const loadCurrentChat = useCallback(async () => {
     setLoading(true)
-    const res = await api.get('/chat/current')
+    const res = await api.get<GroupChat | null>('/chat/current')
     if (res.ok && res.data) {
       setChat(res.data)
-      const msgRes = await api.get(`/message/list?chatId=${res.data.id}&limit=100`)
+      const msgRes = await api.get<Message[]>(
+        `/message/list?chatId=${res.data.id}&limit=100`,
+      )
       if (msgRes.ok) {
         setMessages(msgRes.data)
       }
+    } else {
+      setChat(null)
+      setMessages([])
     }
     setLoading(false)
-  }
+  }, [])
+
+  // ─── Load the user's one active chat ─────────────────────────────
+  useEffect(() => {
+    loadCurrentChat()
+  }, [loadCurrentChat])
+
+  const chatWritable = chat ? isChatWritable(chat) : false
 
   // ─── Subscribe to realtime messages ──────────────────────────────
   usePusher(
@@ -112,7 +126,7 @@ export default function ChatTab() {
   const handleTextChange = useCallback(
     (newText: string) => {
       setText(newText)
-      if (!chat) return
+      if (!chat || !chatWritable) return
 
       const isTyping = newText.trim().length > 0
 
@@ -136,15 +150,19 @@ export default function ChatTab() {
         api.post('/message/typing', { chatId: chat.id, status: 'stop' })
       }
     },
-    [chat],
+    [chat, chatWritable],
   )
 
   // ─── Send message ────────────────────────────────────────────────
   const handleSend = useCallback(async () => {
-    if (!text.trim() || sending || !chat) return
+    if (!text.trim() || sending || !chat || !chatWritable) return
     setSending(true)
     const trimmed = text.trim()
     setText('')
+    try {
+      const Haptics = require('expo-haptics')
+      Haptics.impactAsync?.(Haptics.ImpactFeedbackStyle?.Light)
+    } catch {}
 
     // Stop typing indicator
     if (wasTypingRef.current) {
@@ -160,19 +178,48 @@ export default function ChatTab() {
     }
     setMessages((prev) => [...prev, optimistic])
 
-    const res = await api.post('/message/send', {
+    const res = await api.post<Message>('/message/send', {
       chatId: chat.id,
       text: trimmed,
       clientId: optimistic.id,
     })
 
     if (res.ok) {
+      // Replace optimistic row; Pusher may also deliver the same id — deduped in usePusher
       setMessages((prev) =>
         prev.map((m) => (m.id === optimistic.id ? res.data : m)),
       )
+    } else {
+      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id))
+      Alert.alert('Could not send', res.error ?? 'Something went wrong')
+      if (res.error?.toLowerCase().includes('expired')) {
+        await loadCurrentChat()
+      }
     }
     setSending(false)
-  }, [text, sending, chat, user])
+  }, [text, sending, chat, chatWritable, user, loadCurrentChat])
+
+  const handleDevExpireChat = useCallback(async () => {
+    if (!chat || !__DEV__) return
+    Alert.alert('Expire this chat?', 'Sets active=false for testing read-only mode.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Expire',
+        style: 'destructive',
+        onPress: async () => {
+          const res = await api.post<{ chat: GroupChat }>('/dev/expire-chat', {
+            chatId: chat.id,
+          })
+          if (res.ok) {
+            setChat(res.data.chat)
+            setText('')
+          } else {
+            Alert.alert('Error', res.error ?? 'Expire failed')
+          }
+        },
+      },
+    ])
+  }, [chat])
 
   // ─── Ranking drawer ─────────────────────────────────────────────
 
@@ -348,20 +395,34 @@ export default function ChatTab() {
       {/* Top bar — your color + rank button */}
       <SafeAreaView style={styles.topBar}>
         <View style={styles.topBarInner}>
-          {myColor && (
-            <View style={styles.topBarColorRow}>
-              <View
-                style={[styles.topBarDot, { backgroundColor: CHAT_COLOR_HEX[myColor] }]}
-              />
-              <Text style={styles.topBarColorText}>You are {myColor}</Text>
-            </View>
-          )}
+          <View style={styles.topBarLeft}>
+            {myColor && (
+              <View style={styles.topBarColorRow}>
+                <View
+                  style={[styles.topBarDot, { backgroundColor: CHAT_COLOR_HEX[myColor] }]}
+                />
+                <Text style={styles.topBarColorText}>You are {myColor}</Text>
+              </View>
+            )}
+            {chat && (
+              <Text style={styles.topBarExpiry}>{formatChatExpiry(chat)}</Text>
+            )}
+          </View>
+          <View style={styles.topBarActions}>
+            {__DEV__ && chatWritable && (
+              <TouchableOpacity style={styles.devExpireButton} onPress={handleDevExpireChat}>
+                <Text style={styles.devExpireText}>Expire</Text>
+              </TouchableOpacity>
+            )}
           <TouchableOpacity style={styles.rankButton} onPress={openRanking}>
             <Text style={styles.rankChevron}>‹</Text>
             <Text style={styles.rankButtonText}>Rank</Text>
           </TouchableOpacity>
+          </View>
         </View>
       </SafeAreaView>
+
+      <ChatBanners chat={chat} />
 
       {/* Messages */}
       <FlatList
@@ -396,27 +457,29 @@ export default function ChatTab() {
         </View>
       )}
 
-      {/* Input */}
-      <View style={styles.inputBar}>
-        <TextInput
-          style={styles.input}
-          value={text}
-          onChangeText={handleTextChange}
-          placeholder="Type a message..."
-          placeholderTextColor="#9CA3AF"
-          multiline
-          maxLength={5000}
-          returnKeyType="send"
-          blurOnSubmit={false}
-        />
-        <TouchableOpacity
-          style={[styles.sendButton, !text.trim() && styles.sendButtonDisabled]}
-          disabled={!text.trim() || sending}
-          onPress={handleSend}
-        >
-          <Text style={styles.sendButtonText}>↑</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Input — hidden when chat is read-only */}
+      {chatWritable ? (
+        <View style={styles.inputBar}>
+          <TextInput
+            style={styles.input}
+            value={text}
+            onChangeText={handleTextChange}
+            placeholder="Type a message..."
+            placeholderTextColor="#9CA3AF"
+            multiline
+            maxLength={5000}
+            returnKeyType="send"
+            blurOnSubmit={false}
+          />
+          <TouchableOpacity
+            style={[styles.sendButton, !text.trim() && styles.sendButtonDisabled]}
+            disabled={!text.trim() || sending}
+            onPress={handleSend}
+          >
+            <Text style={styles.sendButtonText}>↑</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {/* ─── Ranking Side Drawer ─────────────────────────────────────── */}
       {showRanking && (
@@ -509,9 +572,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
+  topBarLeft: { flex: 1 },
+  topBarActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   topBarColorRow: { flexDirection: 'row', alignItems: 'center' },
   topBarDot: { width: 10, height: 10, borderRadius: 5, marginRight: 6 },
   topBarColorText: { fontSize: 14, color: '#6B7280' },
+  topBarExpiry: { fontSize: 12, color: '#9CA3AF', marginTop: 2 },
+  devExpireButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#FEE2E2',
+  },
+  devExpireText: { fontSize: 12, fontWeight: '600', color: '#DC2626' },
 
   // Rank button
   rankButton: {

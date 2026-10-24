@@ -1,7 +1,22 @@
-import { Stack } from 'expo-router'
+import { useEffect } from 'react'
+import { Stack, router } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
+import { configureNotificationHandler } from '@/lib/notifications'
+import { setOnUnauthorized } from '@/lib/api'
+import { useAuthStore } from '@/stores/authStore'
 
 export default function RootLayout() {
+  useEffect(() => {
+    configureNotificationHandler()
+
+    setOnUnauthorized(() => {
+      useAuthStore
+        .getState()
+        .logout()
+        .then(() => router.replace('/(auth)/login'))
+    })
+  }, [])
+
   return (
     <>
       <StatusBar style="dark" />

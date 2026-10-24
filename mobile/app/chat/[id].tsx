@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -8,15 +8,22 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
+  Alert,
 } from 'react-native'
-import { useLocalSearchParams } from 'expo-router'
+import { Stack, useLocalSearchParams } from 'expo-router'
 import { api } from '@/lib/api'
 import { usePusher } from '@/lib/pusher'
 import { useAuthStore } from '@/stores/authStore'
 import type { Message, GroupChat } from '@groupchat/shared'
-import { CHAT_COLOR_HEX, LIGHT_COLORS, toPusherKey } from '@groupchat/shared'
+import { CHAT_COLOR_HEX, LIGHT_COLORS, toPusherKey, isChatWritable } from '@groupchat/shared'
 import type { ChatColor } from '@groupchat/shared'
+import { ChatBanners } from '@/components/ChatBanners'
 
+/**
+ * Per-chat screen (e.g. opened from History).
+ * Loads metadata via GET /api/chat/:id — not inferred from the message list.
+ */
 export default function ChatScreen() {
   const { id: chatId } = useLocalSearchParams<{ id: string }>()
   const { user } = useAuthStore()
@@ -24,41 +31,56 @@ export default function ChatScreen() {
   const [chat, setChat] = useState<GroupChat | null>(null)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
+  const [loading, setLoading] = useState(true)
   const flatListRef = useRef<FlatList>(null)
 
-  // Subscribe to realtime messages
-  usePusher(chatId ? toPusherKey(`chat:${chatId}`) : null, 'incoming-message', (message: Message) => {
-    setMessages((prev) => {
-      if (prev.some((m) => m.id === message.id)) return prev
-      return [...prev, message].sort((a, b) => a.timestamp - b.timestamp)
-    })
-  })
+  const chatWritable = chat ? isChatWritable(chat) : false
 
-  useEffect(() => {
+  const loadChat = useCallback(async () => {
     if (!chatId) return
-    loadChat()
-    loadMessages()
+    const res = await api.get<GroupChat>(`/chat/${chatId}`)
+    if (res.ok) {
+      setChat(res.data)
+    } else {
+      setChat(null)
+      Alert.alert('Chat unavailable', res.error ?? 'Could not load chat')
+    }
   }, [chatId])
 
-  const loadChat = async () => {
-    // We get chat details from the list endpoint, but ideally we'd have a /chat/:id route
-    // For now, we embed it in the messages load
-  }
-
-  const loadMessages = async () => {
-    const res = await api.get(`/message/list?chatId=${chatId}&limit=100`)
+  const loadMessages = useCallback(async () => {
+    if (!chatId) return
+    const res = await api.get<Message[]>(`/message/list?chatId=${chatId}&limit=100`)
     if (res.ok) {
       setMessages(res.data)
     }
-  }
+  }, [chatId])
+
+  useEffect(() => {
+    if (!chatId) return
+    ;(async () => {
+      setLoading(true)
+      await Promise.all([loadChat(), loadMessages()])
+      setLoading(false)
+    })()
+  }, [chatId, loadChat, loadMessages])
+
+  usePusher(
+    chatId ? toPusherKey(`chat:${chatId}`) : null,
+    'incoming-message',
+    (message: Message) => {
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === message.id)) return prev
+        return [...prev, message].sort((a, b) => a.timestamp - b.timestamp)
+      })
+    },
+  )
 
   const handleSend = async () => {
-    if (!text.trim() || sending) return
+    if (!text.trim() || sending || !chatId || !chatWritable) return
     setSending(true)
     const trimmed = text.trim()
     setText('')
 
-    // Optimistic add
     const optimistic: Message = {
       id: `tmp_${Date.now()}`,
       senderId: user?.id ?? '',
@@ -67,17 +89,22 @@ export default function ChatScreen() {
     }
     setMessages((prev) => [...prev, optimistic])
 
-    const res = await api.post('/message/send', {
+    const res = await api.post<Message>('/message/send', {
       chatId,
       text: trimmed,
       clientId: optimistic.id,
     })
 
     if (res.ok) {
-      // Replace optimistic message with server response
       setMessages((prev) =>
         prev.map((m) => (m.id === optimistic.id ? res.data : m)),
       )
+    } else {
+      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id))
+      Alert.alert('Could not send', res.error ?? 'Something went wrong')
+      if (res.error?.toLowerCase().includes('expired')) {
+        await loadChat()
+      }
     }
 
     setSending(false)
@@ -88,15 +115,81 @@ export default function ChatScreen() {
     return (chat.memberColors[userId] as ChatColor) ?? null
   }
 
+  const reportMessage = (message: Message) => {
+    if (message.senderId === user?.id) {
+      Alert.alert('Report', 'You cannot report your own message')
+      return
+    }
+    Alert.alert(
+      'Report message',
+      'Select a reason',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Spam',
+          onPress: async () => {
+            await api.post('/report', {
+              targetType: 'message',
+              targetId: message.id,
+              chatId,
+              reason: 'spam',
+            })
+            Alert.alert('Reported', 'Thank you for reporting this message.')
+          },
+        },
+        {
+          text: 'Harassment',
+          onPress: async () => {
+            await api.post('/report', {
+              targetType: 'message',
+              targetId: message.id,
+              chatId,
+              reason: 'harassment',
+            })
+            Alert.alert('Reported', 'Thank you for reporting this message.')
+          },
+        },
+        {
+          text: 'Hate speech',
+          onPress: async () => {
+            await api.post('/report', {
+              targetType: 'message',
+              targetId: message.id,
+              chatId,
+              reason: 'hate_speech',
+            })
+            Alert.alert('Reported', 'Thank you for reporting this message.')
+          },
+        },
+        {
+          text: 'Inappropriate',
+          onPress: async () => {
+            await api.post('/report', {
+              targetType: 'message',
+              targetId: message.id,
+              chatId,
+              reason: 'inappropriate',
+            })
+            Alert.alert('Reported', 'Thank you for reporting this message.')
+          },
+        },
+      ],
+      { cancelable: true },
+    )
+  }
+
   const renderMessage = ({ item, index }: { item: Message; index: number }) => {
     const isMe = item.senderId === user?.id
     const color = getColorForUser(item.senderId)
-    const bgColor = color ? CHAT_COLOR_HEX[color] : (isMe ? '#4F46E5' : '#F3F4F6')
+    const bgColor = color ? CHAT_COLOR_HEX[color] : isMe ? '#4F46E5' : '#F3F4F6'
     const textColor = color
-      ? (LIGHT_COLORS.includes(color) ? '#000000' : '#FFFFFF')
-      : (isMe ? '#FFFFFF' : '#111827')
+      ? LIGHT_COLORS.includes(color)
+        ? '#000000'
+        : '#FFFFFF'
+      : isMe
+        ? '#FFFFFF'
+        : '#111827'
 
-    // Show color label for other users
     const prevMsg = index > 0 ? messages[index - 1] : null
     const showLabel = !isMe && (!prevMsg || prevMsg.senderId !== item.senderId)
 
@@ -107,73 +200,103 @@ export default function ChatScreen() {
             {color}
           </Text>
         )}
-        <View style={[styles.bubble, { backgroundColor: bgColor }, isMe && styles.bubbleMe]}>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onLongPress={() => reportMessage(item)}
+          delayLongPress={400}
+          style={[styles.bubble, { backgroundColor: bgColor }, isMe && styles.bubbleMe]}
+        >
           <Text style={[styles.msgText, { color: textColor }]}>{item.text}</Text>
           <Text style={[styles.msgTime, { color: textColor, opacity: 0.6 }]}>
-            {new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            {new Date(item.timestamp).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
           </Text>
-        </View>
+        </TouchableOpacity>
       </View>
     )
   }
 
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={100}
-    >
-      {/* Icebreaker banner */}
-      {chat?.icebreaker && (
-        <View style={styles.icebreaker}>
-          <Text style={styles.icebreakerText}>💡 {chat.icebreaker}</Text>
+  if (loading) {
+    return (
+      <>
+        <Stack.Screen options={{ title: 'Group Chat' }} />
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#4F46E5" />
         </View>
-      )}
+      </>
+    )
+  }
 
-      {/* Messages */}
-      <FlatList
-        ref={flatListRef}
-        data={messages}
-        keyExtractor={(item) => item.id}
-        renderItem={renderMessage}
-        contentContainerStyle={styles.messageList}
-        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+  if (!chat) {
+    return (
+      <>
+        <Stack.Screen options={{ title: 'Group Chat' }} />
+        <View style={styles.center}>
+          <Text style={styles.errorText}>Chat not found</Text>
+        </View>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <Stack.Screen
+        options={{
+          title: chat.active ? 'Group Chat' : 'Chat (ended)',
+        }}
       />
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={100}
+      >
+        <ChatBanners chat={chat} />
 
-      {/* Input */}
-      <View style={styles.inputBar}>
-        <TextInput
-          style={styles.input}
-          value={text}
-          onChangeText={setText}
-          placeholder="Type a message..."
-          placeholderTextColor="#9CA3AF"
-          multiline
-          maxLength={5000}
+        <FlatList
+          ref={flatListRef}
+          data={messages}
+          keyExtractor={(item) => item.id}
+          renderItem={renderMessage}
+          contentContainerStyle={styles.messageList}
+          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          ListEmptyComponent={
+            <Text style={styles.emptyMessages}>No messages in this chat</Text>
+          }
         />
-        <TouchableOpacity
-          style={[styles.sendButton, !text.trim() && styles.sendButtonDisabled]}
-          disabled={!text.trim() || sending}
-          onPress={handleSend}
-        >
-          <Text style={styles.sendButtonText}>↑</Text>
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+
+        {chatWritable ? (
+          <View style={styles.inputBar}>
+            <TextInput
+              style={styles.input}
+              value={text}
+              onChangeText={setText}
+              placeholder="Type a message..."
+              placeholderTextColor="#9CA3AF"
+              multiline
+              maxLength={5000}
+            />
+            <TouchableOpacity
+              style={[styles.sendButton, !text.trim() && styles.sendButtonDisabled]}
+              disabled={!text.trim() || sending}
+              onPress={handleSend}
+            >
+              <Text style={styles.sendButtonText}>↑</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
+      </KeyboardAvoidingView>
+    </>
   )
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#FFFFFF' },
-  icebreaker: {
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E7FF',
-  },
-  icebreakerText: { fontSize: 15, color: '#4338CA', lineHeight: 22 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  errorText: { fontSize: 16, color: '#6B7280' },
   messageList: { padding: 12, gap: 4 },
+  emptyMessages: { textAlign: 'center', color: '#9CA3AF', paddingTop: 24 },
   msgRow: { alignItems: 'flex-start', marginBottom: 2 },
   msgRowMe: { alignItems: 'flex-end' },
   colorLabel: { fontSize: 12, fontWeight: '600', marginBottom: 2, marginLeft: 4 },
@@ -219,5 +342,3 @@ const styles = StyleSheet.create({
   sendButtonDisabled: { opacity: 0.4 },
   sendButtonText: { fontSize: 20, fontWeight: '700', color: '#FFFFFF' },
 })
-
-
