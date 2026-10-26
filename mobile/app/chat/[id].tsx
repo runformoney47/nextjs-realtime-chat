@@ -19,6 +19,7 @@ import type { Message, GroupChat } from '@groupchat/shared'
 import { CHAT_COLOR_HEX, LIGHT_COLORS, toPusherKey, isChatWritable } from '@groupchat/shared'
 import type { ChatColor } from '@groupchat/shared'
 import { ChatBanners } from '@/components/ChatBanners'
+import { addBlockedUser, fetchBlockedUsers } from '@/lib/blocks'
 
 /**
  * Per-chat screen (e.g. opened from History).
@@ -32,6 +33,7 @@ export default function ChatScreen() {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [blockedSet, setBlockedSet] = useState<Set<string>>(new Set())
   const flatListRef = useRef<FlatList>(null)
 
   const chatWritable = chat ? isChatWritable(chat) : false
@@ -59,7 +61,7 @@ export default function ChatScreen() {
     if (!chatId) return
     ;(async () => {
       setLoading(true)
-      await Promise.all([loadChat(), loadMessages()])
+      await Promise.all([loadChat(), loadMessages(), fetchBlockedUsers().then(setBlockedSet)])
       setLoading(false)
     })()
   }, [chatId, loadChat, loadMessages])
@@ -173,12 +175,34 @@ export default function ChatScreen() {
             Alert.alert('Reported', 'Thank you for reporting this message.')
           },
         },
+        {
+          text: 'Block user',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert('Block user', 'Block this user? Their messages will be hidden.', [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Block',
+                style: 'destructive',
+                onPress: async () => {
+                  const res = await api.post('/block', { userId: message.senderId })
+                  if (res.ok) {
+                    addBlockedUser(message.senderId)
+                    setBlockedSet((prev) => new Set([...prev, message.senderId]))
+                    Alert.alert('Blocked', 'This user has been blocked.')
+                  }
+                },
+              },
+            ])
+          },
+        },
       ],
       { cancelable: true },
     )
   }
 
   const renderMessage = ({ item, index }: { item: Message; index: number }) => {
+    if (blockedSet.has(item.senderId)) return <View />
     const isMe = item.senderId === user?.id
     const color = getColorForUser(item.senderId)
     const bgColor = color ? CHAT_COLOR_HEX[color] : isMe ? '#4F46E5' : '#F3F4F6'

@@ -7,6 +7,7 @@ import { sendMessageSchema, messageSchema } from '@groupchat/shared'
 import { toPusherKey } from '@groupchat/shared'
 import type { Message, ApiResponse } from '@groupchat/shared'
 import { nanoid } from 'nanoid'
+import { rateLimit } from '@/lib/rate-limit'
 
 /**
  * POST /api/message/send
@@ -20,6 +21,13 @@ export async function POST(req: Request) {
       return Response.json(
         { ok: false, error: 'Unauthorized' } satisfies ApiResponse<never>,
         { status: 401 },
+      )
+    }
+    const rl = rateLimit(`msg:${auth.sub}`, 30, 60_000)
+    if (!rl.allowed) {
+      return Response.json(
+        { ok: false, error: 'Too many messages. Please slow down.' } satisfies ApiResponse<never>,
+        { status: 429 },
       )
     }
 

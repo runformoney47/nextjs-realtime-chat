@@ -44,6 +44,13 @@ export default function HistoryTab() {
         data={pastChats}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
+        ListHeaderComponent={
+          pastChats.length > 0 ? (
+            <View style={styles.hint}>
+              <Text style={styles.hintText}>Swipe left in a chat to rate your groupmates</Text>
+            </View>
+          ) : null
+        }
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyText}>No past chats yet</Text>
@@ -96,6 +103,6 @@ const styles = StyleSheet.create({
   info: { flex: 1 },
   title: { fontSize: 15, fontWeight: '600', color: '#374151' },
   date: { fontSize: 13, color: '#9CA3AF', marginTop: 2 },
+  hint: { paddingHorizontal: 4, paddingBottom: 8 },
+  hintText: { fontSize: 13, color: '#6B7280' },
 })
-
-

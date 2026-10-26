@@ -7,6 +7,7 @@ export default function AuthLayout() {
       <Stack.Screen name="dev-login" options={{ headerShown: false }} />
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="terms" />
+      <Stack.Screen name="privacy" />
     </Stack>
   )
 }

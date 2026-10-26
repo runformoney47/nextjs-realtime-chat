@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { reportSchema } from '@groupchat/shared'
 import type { ApiResponse } from '@groupchat/shared'
 import { nanoid } from 'nanoid'
+import { rateLimit } from '@/lib/rate-limit'
 
 /**
  * POST /api/report
@@ -15,6 +16,13 @@ export async function POST(req: Request) {
     return Response.json(
       { ok: false, error: 'Unauthorized' } satisfies ApiResponse<never>,
       { status: 401 },
+    )
+  }
+  const rl = rateLimit(`report:${auth.sub}`, 10, 60_000)
+  if (!rl.allowed) {
+    return Response.json(
+      { ok: false, error: 'Too many reports' } satisfies ApiResponse<never>,
+      { status: 429 },
     )
   }
 

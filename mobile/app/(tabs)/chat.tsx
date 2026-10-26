@@ -29,6 +29,7 @@ import {
 import type { ChatColor } from '@groupchat/shared'
 import DragToReorder from '@/components/DragToReorder'
 import { ChatBanners } from '@/components/ChatBanners'
+import { addBlockedUser, fetchBlockedUsers } from '@/lib/blocks'
 
 const SCREEN_WIDTH = Dimensions.get('window').width
 const DRAWER_WIDTH = SCREEN_WIDTH * 0.82
@@ -49,6 +50,7 @@ export default function ChatTab() {
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([])
   const [showRanking, setShowRanking] = useState(false)
   const [ranking, setRanking] = useState<string[]>([])
+  const [blockedSet, setBlockedSet] = useState<Set<string>>(new Set())
   const flatListRef = useRef<FlatList>(null)
   const drawerAnim = useRef(new Animated.Value(DRAWER_WIDTH)).current
   const typingTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -76,6 +78,7 @@ export default function ChatTab() {
   // ─── Load the user's one active chat ─────────────────────────────
   useEffect(() => {
     loadCurrentChat()
+    fetchBlockedUsers().then(setBlockedSet)
   }, [loadCurrentChat])
 
   const chatWritable = chat ? isChatWritable(chat) : false
@@ -86,6 +89,7 @@ export default function ChatTab() {
     'incoming-message',
     (message: Message) => {
       setMessages((prev) => {
+        if (blockedSet.has(message.senderId)) return prev
         if (prev.some((m) => m.id === message.id)) return prev
         return [...prev, message].sort((a, b) => a.timestamp - b.timestamp)
       })
@@ -255,6 +259,86 @@ export default function ChatTab() {
     [chat],
   )
 
+  // ─── Report / Block ─────────────────────────────────────────────
+  const reportMessage = useCallback(
+    (message: Message) => {
+      if (!user || message.senderId === user.id) {
+        Alert.alert('Report', 'You cannot report your own message')
+        return
+      }
+      Alert.alert(
+        'Report message',
+        'Select a reason',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Spam',
+            onPress: async () => {
+              await api.post('/report', {
+                targetType: 'message',
+                targetId: message.id,
+                chatId: chat?.id,
+                reason: 'spam',
+              })
+              Alert.alert('Reported', 'Thank you for reporting this message.')
+            },
+          },
+          {
+            text: 'Harassment',
+            onPress: async () => {
+              await api.post('/report', {
+                targetType: 'message',
+                targetId: message.id,
+                chatId: chat?.id,
+                reason: 'harassment',
+              })
+              Alert.alert('Reported', 'Thank you for reporting this message.')
+            },
+          },
+          {
+            text: 'Hate speech',
+            onPress: async () => {
+              await api.post('/report', {
+                targetType: 'message',
+                targetId: message.id,
+                chatId: chat?.id,
+                reason: 'hate_speech',
+              })
+              Alert.alert('Reported', 'Thank you for reporting this message.')
+            },
+          },
+          {
+            text: 'Block user',
+            style: 'destructive',
+            onPress: () => {
+              Alert.alert(
+                'Block user',
+                'Block this user? Their messages will be hidden.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Block',
+                    style: 'destructive',
+                    onPress: async () => {
+                      const res = await api.post('/block', { userId: message.senderId })
+                      if (res.ok) {
+                        addBlockedUser(message.senderId)
+                        setBlockedSet((prev) => new Set([...prev, message.senderId]))
+                        Alert.alert('Blocked', 'This user has been blocked.')
+                      }
+                    },
+                  },
+                ],
+              )
+            },
+          },
+        ],
+        { cancelable: true },
+      )
+    },
+    [chat?.id, user],
+  )
+
   // ─── Helpers ─────────────────────────────────────────────────────
   const getColorForUser = (userId: string): ChatColor | null => {
     if (!chat?.memberColors) return null
@@ -312,6 +396,7 @@ export default function ChatTab() {
 
   // ─── Message rendering with burst grouping ───────────────────────
   const renderMessage = ({ item, index }: { item: Message; index: number }) => {
+    if (blockedSet.has(item.senderId)) return <View />
     const isMe = item.senderId === user?.id
     const color = getColorForUser(item.senderId)
     const bgColor = color ? CHAT_COLOR_HEX[color] : isMe ? '#4F46E5' : '#F3F4F6'
@@ -362,7 +447,10 @@ export default function ChatTab() {
             {color}
           </Text>
         )}
-        <View
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onLongPress={() => reportMessage(item)}
+          delayLongPress={400}
           style={[
             styles.bubble,
             { backgroundColor: bgColor },
@@ -378,7 +466,7 @@ export default function ChatTab() {
               })}
             </Text>
           )}
-        </View>
+        </TouchableOpacity>
       </View>
     )
   }
@@ -416,7 +504,7 @@ export default function ChatTab() {
             )}
           <TouchableOpacity style={styles.rankButton} onPress={openRanking}>
             <Text style={styles.rankChevron}>‹</Text>
-            <Text style={styles.rankButtonText}>Rank</Text>
+            <Text style={styles.rankButtonText}>Rate</Text>
           </TouchableOpacity>
           </View>
         </View>

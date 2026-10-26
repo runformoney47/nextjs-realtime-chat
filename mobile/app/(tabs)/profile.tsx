@@ -57,6 +57,30 @@ export default function ProfileTab() {
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => {
+            Alert.alert(
+              'Delete Account',
+              'This will permanently delete your account and data. This cannot be undone.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: async () => {
+                    const res = await require('@/lib/api').api.delete('/auth/delete')
+                    await logout()
+                    router.replace('/(auth)/login')
+                  },
+                },
+              ],
+            )
+          }}
+        >
+          <Text style={styles.deleteText}>Delete Account</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   )
@@ -99,6 +123,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoutText: { fontSize: 16, fontWeight: '600', color: '#DC2626' },
+  deleteButton: {
+    marginTop: 16,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteText: { fontSize: 16, fontWeight: '600', color: '#6B7280' },
 })
 
 

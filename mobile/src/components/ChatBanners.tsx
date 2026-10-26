@@ -28,7 +28,7 @@ export function ChatBanners({ chat }: Props) {
         <View style={styles.endedBanner}>
           <Text style={styles.endedTitle}>This chat has ended</Text>
           <Text style={styles.endedSubtitle}>
-            You can still read messages below. Rank your groupmates with a left swipe.
+            You can still read messages below. Swipe left or tap Rate to rank your groupmates.
           </Text>
         </View>
       ) : expiryLabel !== 'Ended' ? (
